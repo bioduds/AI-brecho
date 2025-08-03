@@ -77,35 +77,33 @@ def _parse_json(txt: str) -> dict:
 def multimodal_intake_analyze(images) -> dict:
     """Análise multimodal completa das imagens de roupas"""
     prompt = (
-        "IMPORTANTE: Todas as fotos mostram a MESMA peça de roupa em diferentes ângulos. "
-        "Analise todas as imagens em conjunto para formar uma avaliação completa. "
+        "Analise esta peça de roupa mostrada nas fotos. "
+        "Forneça o maior detalhamento possível sobre todos os aspectos que conseguir identificar. "
         
-        "Examine cuidadosamente: "
-        "1. TIPO DE ROUPA: Identifique se é blusa, moletom, tricot, vestido, calça, etc. "
-        "2. TECIDO E TEXTURA: Algodão, tricot, moletom, lã, polyester, jeans, etc. "
-        "3. QUALIDADE E MARCA: Sinais de qualidade, acabamento, possível faixa de preço original "
-        "4. CONDIÇÃO REAL: Examine defeitos, desgaste, pills, manchas, etc. "
-        "5. ESTILO E OCASIÃO: Casual, elegante, esportivo, festa, trabalho "
-        "6. DETALHES ESPECIAIS: Bordados, estampas, cortes, modelagem única "
+        "Examine e descreva: "
+        "- Que tipo de peça é (categoria específica) "
+        "- Material/tecido que aparenta ser "
+        "- Cor e características visuais "
+        "- Condição atual da peça "
+        "- Estilo e modelagem "
+        "- Qualquer detalhe relevante que conseguir observar "
         
-        "Para PREÇO, considere que é um brechó de qualidade em BH: "
-        "- Peças básicas: R$15-40 "
-        "- Peças de marca/qualidade: R$40-120 "
-        "- Peças premium/designer: R$100-300+ "
+        "Para precificação em brechó, considere qualidade e condição observadas. "
+        "Faixas típicas: básicas R$15-40, intermediárias R$40-120, premium R$100-300+. "
         
         "Retorne JSON com: "
         '{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem",'
         '"Cor","Tecido","Condição","Defeitos","TituloIG","Tags",'
         '"DescricaoCompleta","RelatorioDetalhado","ValorEstimado"}. '
         
-        "RelatorioDetalhado deve ter 4-5 frases analisando: tipo de peça, qualidade do tecido, "
-        "condição geral, estilo, e justificativa do preço sugerido."
+        "RelatorioDetalhado: análise completa do que observou na peça, "
+        "incluindo tipo, material, condição e justificativa do valor."
     )
     
     system = (
-        "Você é um especialista em moda e avaliação de roupas usadas com 20 anos de experiência. "
-        "Analise cada detalhe visível nas fotos com precisão profissional. "
-        "Seja específico sobre tecidos, modelagem e valor de mercado. "
+        "Você é um especialista em análise visual de roupas. "
+        "Analise apenas o que consegue ver claramente nas fotos, sem assumir informações. "
+        "Seja preciso na identificação de materiais, tipos de peça e condição. "
         "Condição: A=perfeita, A-=ótima, B=boa com sinais leves, C=visível desgaste."
     )
     

@@ -40,6 +40,7 @@ const AIIntake: React.FC = () => {
     const [aiResponse, setAiResponse] = useState<AIIntakeResponse | null>(null);
     const [editableData, setEditableData] = useState<any>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [selectedConsignor, setSelectedConsignor] = useState<string>('');
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
         // Limit to 6 images
@@ -113,6 +114,9 @@ const AIIntake: React.FC = () => {
                 motivoPreco: response.proposal.price.Motivo || ''
             });
 
+            // Abrir edição automaticamente
+            setIsEditing(true);
+
         } catch (err) {
             setError('Erro ao analisar imagens com IA');
             console.error(err);
@@ -180,10 +184,21 @@ const AIIntake: React.FC = () => {
         return (
             <Box sx={{ mt: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                    Editar Dados da IA
+                    Dados do Item - Verificar e Corrigir
                 </Typography>
 
                 <Stack spacing={2}>
+                    {/* Campo de Consignante */}
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="ID do Consignante"
+                        value={selectedConsignor}
+                        onChange={(e) => setSelectedConsignor(e.target.value)}
+                        placeholder="Digite o ID do consignante"
+                        helperText="Obrigatório para gerar etiqueta com QR code"
+                    />
+
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <FormControl fullWidth size="small">
                             <InputLabel>Categoria</InputLabel>
@@ -328,15 +343,40 @@ const AIIntake: React.FC = () => {
                         variant="contained"
                         onClick={handleSaveChanges}
                         size="small"
+                        color="primary"
                     >
-                        Salvar Alterações
+                        Aplicar Alterações
                     </Button>
                     <Button
                         variant="outlined"
-                        onClick={handleToggleEdit}
+                        onClick={() => {
+                            // Reset para dados originais da IA
+                            if (aiResponse) {
+                                setEditableData({
+                                    categoria: aiResponse.proposal.cadastro.Categoria || '',
+                                    subcategoria: aiResponse.proposal.cadastro.Subcategoria || '',
+                                    marca: aiResponse.proposal.cadastro.Marca || '',
+                                    genero: aiResponse.proposal.cadastro.Gênero || '',
+                                    tamanho: aiResponse.proposal.cadastro.Tamanho || '',
+                                    modelagem: aiResponse.proposal.cadastro.Modelagem || '',
+                                    cor: aiResponse.proposal.cadastro.Cor || '',
+                                    tecido: aiResponse.proposal.cadastro.Tecido || '',
+                                    condicao: aiResponse.proposal.cadastro.Condição || '',
+                                    defeitos: aiResponse.proposal.cadastro.Defeitos || '',
+                                    tituloIG: aiResponse.proposal.cadastro.TituloIG || '',
+                                    tags: aiResponse.proposal.cadastro.Tags || '',
+                                    descricaoCompleta: aiResponse.proposal.descricao_completa || '',
+                                    relatorioDetalhado: aiResponse.proposal.relatorio_detalhado || '',
+                                    valorEstimado: aiResponse.proposal.valor_estimado || '',
+                                    precoMin: aiResponse.proposal.price.Faixa?.split('–')[0]?.replace('R$', '') || '',
+                                    precoMax: aiResponse.proposal.price.Faixa?.split('–')[1]?.replace('R$', '') || '',
+                                    motivoPreco: aiResponse.proposal.price.Motivo || ''
+                                });
+                            }
+                        }}
                         size="small"
                     >
-                        Cancelar
+                        Restaurar Original
                     </Button>
                 </Box>
             </Box>
@@ -345,15 +385,29 @@ const AIIntake: React.FC = () => {
 
     const handleConfirmIntake = async () => {
         if (!aiResponse) return;
+        if (!selectedConsignor) {
+            setError('ID do consignante é obrigatório para cadastrar o item');
+            return;
+        }
 
         try {
             const base64Images = await Promise.all(
                 selectedFiles.map(file => convertToBase64(file))
             );
 
+            // Adicionar consignante à proposta
+            const proposalWithConsignor = {
+                ...aiResponse.proposal,
+                consignor_id: selectedConsignor,
+                cadastro: {
+                    ...aiResponse.proposal.cadastro,
+                    ConsignanteId: selectedConsignor
+                }
+            };
+
             await aiAPI.confirmIntake(
                 aiResponse.proposal.sku,
-                aiResponse.proposal,
+                proposalWithConsignor,
                 base64Images
             );
 
@@ -361,11 +415,14 @@ const AIIntake: React.FC = () => {
             setSelectedFiles([]);
             setPreviews([]);
             setAiResponse(null);
+            setEditableData(null);
+            setIsEditing(false);
+            setSelectedConsignor('');
 
-            alert('Item cadastrado com sucesso!');
+            alert('Item cadastrado com sucesso! Etiqueta com QR code pode ser impressa.');
         } catch (err) {
             setError('Erro ao confirmar cadastro');
-            console.error(err);
+            console.error('Erro detalhado:', err);
         }
     };
 
@@ -555,21 +612,8 @@ const AIIntake: React.FC = () => {
                                         </Box>
                                     )}
 
-                                    {/* Editar dados da IA */}
-                                    <Box sx={{ mt: 2, mb: 2 }}>
-                                        <Button
-                                            variant="outlined"
-                                            color="primary"
-                                            size="medium"
-                                            onClick={handleToggleEdit}
-                                            fullWidth
-                                        >
-                                            {isEditing ? 'Cancelar Edição' : 'Editar Dados'}
-                                        </Button>
-                                    </Box>
-
-                                    {/* Formulário de edição */}
-                                    {isEditing && renderEditableFields()}
+                                    {/* Formulário de edição dos dados */}
+                                    {renderEditableFields()}
 
                                     <Button
                                         fullWidth
@@ -578,7 +622,7 @@ const AIIntake: React.FC = () => {
                                         size="large"
                                         onClick={handleConfirmIntake}
                                         sx={{ mt: 2 }}
-                                        disabled={isEditing}
+                                        disabled={!selectedConsignor}
                                     >
                                         Confirmar e Cadastrar Item
                                     </Button>

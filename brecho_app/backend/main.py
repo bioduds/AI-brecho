@@ -151,21 +151,32 @@ async def ai_intake_autoregister(request: AIIntakeRequest):
 
 @app.post(f"{settings.API_V1_STR}/ai/confirm-intake")
 async def confirm_ai_intake(
-    sku: str,
-    proposal: dict,
-    images: List[str],
+    request_data: dict,
     db: Session = Depends(get_db)
 ):
     """Confirm and create item from AI intake proposal"""
     from crud import create_item_from_ai_proposal
     
+    sku = request_data.get("sku")
+    proposal = request_data.get("proposal") 
+    images = request_data.get("images", [])
+    
+    if not sku or not proposal:
+        raise HTTPException(status_code=400, detail="SKU and proposal required")
+    
     # Index item in AI vector database
-    ai_result = await ai_service.index_item(sku, images, proposal.get("cadastro", {}))
+    ai_result = await ai_service.index_item(
+        sku, images, proposal.get("cadastro", {})
+    )
     
     # Create item in main database
     item = create_item_from_ai_proposal(db, sku, proposal, ai_result)
     
-    return {"success": True, "item": item, "ai_indexed": ai_result.get("success", False)}
+    return {
+        "success": True, 
+        "item": item, 
+        "ai_indexed": ai_result.get("success", False)
+    }
 
 
 # QR Code endpoints
