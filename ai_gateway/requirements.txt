@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pillow>=10
+numpy>=1.26
+chromadb>=0.5
+open_clip_torch>=2.24.0
+torch>=2.2; platform_system!='Darwin' or platform_machine!='arm64'
+torchvision>=0.17; platform_system!='Darwin' or platform_machine!='arm64'
+# For macOS arm64 (Apple Silicon), install torch via: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+opencv-python-headless>=4.9
+requests>=2.31

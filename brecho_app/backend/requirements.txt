@@ -1,0 +1,16 @@
+fastapi>=0.110
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.2.0
+sqlalchemy>=2.0
+alembic>=1.13
+python-multipart>=0.0.6
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-dotenv>=1.0.0
+pillow>=10
+numpy>=1.26
+opencv-python-headless>=4.9
+requests>=2.31
+aiofiles>=23.2.0
+qrcode[pil]>=7.4.2
