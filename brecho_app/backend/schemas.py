@@ -53,6 +53,7 @@ class ItemBase(BaseModel):
     flaws: Optional[str] = None
     title_ig: Optional[str] = None
     tags: Optional[str] = None
+    summary_title: Optional[str] = None
     bust: Optional[float] = None
     waist: Optional[float] = None
     length: Optional[float] = None
@@ -142,6 +143,7 @@ class Sale(SaleBase):
 # AI Integration schemas
 class AIIntakeRequest(BaseModel):
     images: List[str] = Field(..., description="Base64 encoded images")
+    audio: Optional[str] = Field(None, description="Base64 encoded audio")
     session_id: Optional[str] = None
 
 

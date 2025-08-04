@@ -122,8 +122,12 @@ def extract_image_features(images):
     return features
 
 @app.post("/intake/autoregister")
-async def intake_autoregister(images: List[UploadFile] = File(...)):
+async def intake_autoregister(
+    images: List[UploadFile] = File(...),
+    audio: Optional[UploadFile] = File(None)
+):
     import time
+    import base64
     start_time = time.time()
     
     if len(images) < 2:
@@ -133,6 +137,16 @@ async def intake_autoregister(images: List[UploadFile] = File(...)):
         )
 
     print(f"[{time.time()-start_time:.1f}s] Iniciando processamento de {len(images)} imagens")
+    
+    # Processar áudio se fornecido
+    audio_base64 = None
+    if audio:
+        try:
+            audio_bytes = await audio.read()
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            print(f"[{time.time()-start_time:.1f}s] Áudio processado ({len(audio_bytes)} bytes)")
+        except Exception as e:
+            print(f"Erro ao processar áudio: {e}")
     
     # QR detection removida - sistema inteligente não precisa
     consignor_id = None
@@ -148,9 +162,10 @@ async def intake_autoregister(images: List[UploadFile] = File(...)):
     # Extrair características visuais das imagens
     visual_features = extract_image_features(pil)
     
-    # Análise multimodal completa usando Gemma 3:4b
-    print(f"[{time.time()-start_time:.1f}s] Iniciando análise multimodal de {len(pil)} imagens...")
-    multimodal_result = multimodal_intake_analyze(pil)
+    # Análise multimodal completa usando Gemma 3:4b com áudio opcional
+    print(f"[{time.time()-start_time:.1f}s] Iniciando análise multimodal de {len(pil)} imagens..." + 
+          (f" com áudio" if audio_base64 else ""))
+    multimodal_result = multimodal_intake_analyze(pil, audio_base64)
     print(f"[{time.time()-start_time:.1f}s] Análise multimodal concluída: {bool(multimodal_result)}")
     
     # Se a análise multimodal falhou, use o método tradicional

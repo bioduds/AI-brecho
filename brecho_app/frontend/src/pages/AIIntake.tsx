@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Box,
     Card,
@@ -19,6 +19,8 @@ import {
     FormControl,
     InputLabel,
     Select,
+    Autocomplete,
+    IconButton,
 } from '@mui/material';
 import {
     PhotoCamera,
@@ -28,9 +30,14 @@ import {
     Warning,
     Edit,
     ExpandMore,
+    Mic,
+    Stop,
+    Delete,
+    PlayArrow,
+    Pause,
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
-import { aiAPI, AIIntakeResponse } from '../services/api';
+import { aiAPI, consignorAPI, AIIntakeResponse, Consignor } from '../services/api';
 
 const AIIntake: React.FC = () => {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -42,7 +49,18 @@ const AIIntake: React.FC = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [selectedConsignor, setSelectedConsignor] = useState<string>('');
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
+    // Audio recording states
+    const [isRecording, setIsRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+    const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+    const [audioURL, setAudioURL] = useState<string | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement>(null);
+
+    // Consignor search states
+    const [consignors, setConsignors] = useState<Consignor[]>([]);
+    const [consignorLoading, setConsignorLoading] = useState(false);
+    const [selectedConsignorObj, setSelectedConsignorObj] = useState<Consignor | null>(null); const onDrop = useCallback((acceptedFiles: File[]) => {
         // Limit to 6 images
         const files = acceptedFiles.slice(0, 6);
         setSelectedFiles(files);
@@ -78,6 +96,88 @@ const AIIntake: React.FC = () => {
         });
     };
 
+    // Audio recording functions
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks: BlobPart[] = [];
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                setAudioBlob(blob);
+                const url = URL.createObjectURL(blob);
+                setAudioURL(url);
+
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            recorder.start();
+            setMediaRecorder(recorder);
+            setIsRecording(true);
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            setError('Erro ao iniciar gravação de áudio');
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            setIsRecording(false);
+        }
+    };
+
+    const clearAudio = () => {
+        setAudioBlob(null);
+        setAudioURL(null);
+        setIsPlaying(false);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    };
+
+    const togglePlayback = () => {
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+                setIsPlaying(false);
+            } else {
+                audioRef.current.play();
+                setIsPlaying(true);
+            }
+        }
+    };
+
+    const handleAudioEnded = () => {
+        setIsPlaying(false);
+    };
+
+    // Load consignors for autocomplete
+    const loadConsignors = async () => {
+        setConsignorLoading(true);
+        try {
+            const data = await consignorAPI.getAll();
+            setConsignors(data);
+        } catch (error) {
+            console.error('Error loading consignors:', error);
+        } finally {
+            setConsignorLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadConsignors();
+    }, []);
+
     const handleAIAnalysis = async () => {
         if (selectedFiles.length < 2) return;
 
@@ -89,7 +189,13 @@ const AIIntake: React.FC = () => {
                 selectedFiles.map(file => convertToBase64(file))
             );
 
-            const response = await aiAPI.intakeAutoregister(base64Images);
+            // Convert audio to base64 if present
+            let audioBase64: string | undefined = undefined;
+            if (audioBlob) {
+                audioBase64 = await convertToBase64(audioBlob as any);
+            }
+
+            const response = await aiAPI.intakeAutoregister(base64Images, audioBase64);
             setAiResponse(response);
 
             // Inicializar dados editáveis
@@ -188,15 +294,35 @@ const AIIntake: React.FC = () => {
                 </Typography>
 
                 <Stack spacing={2}>
-                    {/* Campo de Consignante */}
-                    <TextField
+                    {/* Campo de Consignante com Autocomplete */}
+                    <Autocomplete
                         fullWidth
                         size="small"
-                        label="ID do Consignante"
-                        value={selectedConsignor}
-                        onChange={(e) => setSelectedConsignor(e.target.value)}
-                        placeholder="Digite o ID do consignante"
-                        helperText="Obrigatório para gerar etiqueta com QR code"
+                        options={consignors}
+                        getOptionLabel={(option) => `${option.name} (${option.id})`}
+                        value={selectedConsignorObj}
+                        onChange={(_, newValue) => {
+                            setSelectedConsignorObj(newValue);
+                            setSelectedConsignor(newValue?.id || '');
+                        }}
+                        loading={consignorLoading}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Consignante"
+                                placeholder="Busque por nome ou ID"
+                                helperText="Obrigatório para gerar etiqueta com QR code"
+                                InputProps={{
+                                    ...params.InputProps,
+                                    endAdornment: (
+                                        <>
+                                            {consignorLoading ? <CircularProgress size={20} /> : null}
+                                            {params.InputProps.endAdornment}
+                                        </>
+                                    ),
+                                }}
+                            />
+                        )}
                     />
 
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -418,6 +544,10 @@ const AIIntake: React.FC = () => {
             setEditableData(null);
             setIsEditing(false);
             setSelectedConsignor('');
+            setSelectedConsignorObj(null);
+
+            // Reset audio
+            clearAudio();
 
             alert('Item cadastrado com sucesso! Etiqueta com QR code pode ser impressa.');
         } catch (err) {
@@ -511,6 +641,60 @@ const AIIntake: React.FC = () => {
                                 </Box>
                             )}
 
+                            {/* Audio Recording Section */}
+                            <Box sx={{ mt: 3 }}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                    Gravação de Áudio (Opcional)
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                    Grave detalhes sobre o produto em português
+                                </Typography>
+
+                                <Stack direction="row" spacing={2} alignItems="center">
+                                    {!audioBlob ? (
+                                        <Button
+                                            variant={isRecording ? "contained" : "outlined"}
+                                            color={isRecording ? "secondary" : "primary"}
+                                            startIcon={isRecording ? <Stop /> : <Mic />}
+                                            onClick={isRecording ? stopRecording : startRecording}
+                                        >
+                                            {isRecording ? 'Parar Gravação' : 'Gravar Áudio'}
+                                        </Button>
+                                    ) : (
+                                        <>
+                                            <Button
+                                                variant="outlined"
+                                                startIcon={isPlaying ? <Pause /> : <PlayArrow />}
+                                                onClick={togglePlayback}
+                                            >
+                                                {isPlaying ? 'Pausar' : 'Reproduzir'}
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                startIcon={<Delete />}
+                                                onClick={clearAudio}
+                                            >
+                                                Excluir
+                                            </Button>
+                                            <Typography variant="body2" color="textSecondary">
+                                                ✓ Áudio gravado
+                                            </Typography>
+                                        </>
+                                    )}
+                                </Stack>
+
+                                {/* Hidden audio element for playback */}
+                                {audioURL && (
+                                    <audio
+                                        ref={audioRef}
+                                        src={audioURL}
+                                        onEnded={handleAudioEnded}
+                                        style={{ display: 'none' }}
+                                    />
+                                )}
+                            </Box>
+
                             <Button
                                 fullWidth
                                 variant="contained"
@@ -542,19 +726,6 @@ const AIIntake: React.FC = () => {
 
                             {aiResponse && (
                                 <Box>
-                                    {/* QR Detection */}
-                                    {aiResponse.consignor_id ? (
-                                        <Alert severity="success" sx={{ mb: 2 }}>
-                                            <CheckCircle sx={{ mr: 1 }} />
-                                            QR detectado: Consignante {aiResponse.consignor_id}
-                                        </Alert>
-                                    ) : (
-                                        <Alert severity="warning" sx={{ mb: 2 }}>
-                                            <Warning sx={{ mr: 1 }} />
-                                            QR não detectado
-                                        </Alert>
-                                    )}
-
                                     {/* AI Suggestions */}
                                     <Typography variant="subtitle1" gutterBottom>
                                         Sugestões da IA:
@@ -614,6 +785,54 @@ const AIIntake: React.FC = () => {
 
                                     {/* Formulário de edição dos dados */}
                                     {renderEditableFields()}
+
+                                    {/* Seção do Consignante quando não está editando */}
+                                    {!isEditing && (
+                                        <Box sx={{ mt: 2, mb: 2 }}>
+                                            <Typography variant="h6" gutterBottom>
+                                                Consignante
+                                            </Typography>
+                                            {selectedConsignorObj ? (
+                                                <Alert severity="success" sx={{ mb: 2 }}>
+                                                    <Typography variant="body1">
+                                                        <strong>{selectedConsignorObj.name}</strong> (ID: {selectedConsignorObj.id})
+                                                    </Typography>
+                                                </Alert>
+                                            ) : (
+                                                <Box sx={{ mb: 2 }}>
+                                                    <Autocomplete
+                                                        fullWidth
+                                                        size="small"
+                                                        options={consignors}
+                                                        getOptionLabel={(option) => `${option.name} (${option.id})`}
+                                                        value={selectedConsignorObj}
+                                                        onChange={(_, newValue) => {
+                                                            setSelectedConsignorObj(newValue);
+                                                            setSelectedConsignor(newValue?.id || '');
+                                                        }}
+                                                        loading={consignorLoading}
+                                                        renderInput={(params) => (
+                                                            <TextField
+                                                                {...params}
+                                                                label="Selecione o Consignante"
+                                                                placeholder="Busque por nome ou ID"
+                                                                helperText="Obrigatório para cadastrar o item"
+                                                                InputProps={{
+                                                                    ...params.InputProps,
+                                                                    endAdornment: (
+                                                                        <>
+                                                                            {consignorLoading ? <CircularProgress size={20} /> : null}
+                                                                            {params.InputProps.endAdornment}
+                                                                        </>
+                                                                    ),
+                                                                }}
+                                                            />
+                                                        )}
+                                                    />
+                                                </Box>
+                                            )}
+                                        </Box>
+                                    )}
 
                                     <Button
                                         fullWidth

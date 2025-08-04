@@ -55,8 +55,11 @@ def create_item(db: Session, item: ItemCreate):
     return db_item
 
 
-def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, ai_result: dict):
+def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, 
+                                  ai_result: dict, images_b64: list = None):
     """Create item from AI intake proposal"""
+    from ai_services import save_item_images
+    
     cadastro = proposal.get("cadastro", {})
     price_info = proposal.get("price", {})
     
@@ -68,8 +71,16 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, ai_resul
         try:
             price_str = price_range.split("–")[0].replace("R$", "").strip()
             list_price = float(price_str)
-        except:
+        except Exception:
             pass
+    
+    # Save images and get URLs
+    photo_urls = []
+    if images_b64:
+        photo_urls = save_item_images(sku, images_b64)
+    
+    # Generate summary title
+    summary_title = generate_item_summary_title(cadastro)
     
     item_data = {
         "sku": sku,
@@ -85,11 +96,15 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, ai_resul
         "condition": cadastro.get("Condição"),
         "flaws": cadastro.get("Defeitos"),
         "title_ig": cadastro.get("TituloIG"),
-        "tags": json.dumps(cadastro.get("Tags", [])) if cadastro.get("Tags") else None,
+        "tags": (json.dumps(cadastro.get("Tags", [])) 
+                 if cadastro.get("Tags") else None),
+        "photos": (",".join(photo_urls) 
+                   if photo_urls else None),  # Store as comma-separated URLs
         "list_price": list_price,
         "ai_confidence": 0.8,  # Default confidence
         "ai_similar_items": json.dumps(ai_result.get("similar_items", [])),
-        "notes": f"AI Auto-intake: {price_info.get('Motivo', '')}"
+        "notes": f"AI Auto-intake: {price_info.get('Motivo', '')}",
+        "summary_title": summary_title  # Add summary title
     }
     
     db_item = Item(**item_data)
@@ -97,6 +112,39 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, ai_resul
     db.commit()
     db.refresh(db_item)
     return db_item
+
+
+def generate_item_summary_title(cadastro: dict) -> str:
+    """Generate a summary title for the item"""
+    parts = []
+    
+    # Add brand if available
+    if cadastro.get("Marca"):
+        parts.append(cadastro["Marca"])
+    
+    # Add category and subcategory
+    if cadastro.get("Categoria"):
+        parts.append(cadastro["Categoria"])
+    if cadastro.get("Subcategoria") and cadastro["Subcategoria"] != cadastro.get("Categoria"):
+        parts.append(cadastro["Subcategoria"])
+    
+    # Add gender if available
+    if cadastro.get("Gênero"):
+        parts.append(cadastro["Gênero"])
+    
+    # Add size if available
+    if cadastro.get("Tamanho"):
+        parts.append(f"Tam {cadastro['Tamanho']}")
+    
+    # Add color if available
+    if cadastro.get("Cor"):
+        parts.append(cadastro["Cor"])
+    
+    # Add condition if available
+    if cadastro.get("Condição"):
+        parts.append(f"({cadastro['Condição']})")
+    
+    return " ".join(parts) if parts else "Item sem título"
 
 
 def get_sale(db: Session, sale_id: str):

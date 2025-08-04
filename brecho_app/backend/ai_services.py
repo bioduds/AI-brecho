@@ -2,6 +2,9 @@ import requests
 import base64
 import io
 import json
+import os
+import uuid
+from datetime import datetime
 from typing import List, Dict, Optional
 from PIL import Image
 from config import settings
@@ -49,14 +52,26 @@ class AIGatewayService:
                 "error": str(e)
             }
     
-    async def intake_autoregister(self, images_b64: List[str]) -> Dict:
+    async def intake_autoregister(self, images_b64: List[str], audio_b64: Optional[str] = None) -> Dict:
         """Auto-register items using AI"""
         try:
+            # Debug: verificar se áudio está presente
+            print(f"DEBUG AI_SERVICE: Áudio presente: {bool(audio_b64)}")
+            if audio_b64:
+                print(f"DEBUG AI_SERVICE: Tamanho do áudio: {len(audio_b64)} chars")
+            
             files = []
             for i, img_b64 in enumerate(images_b64):
                 image_data = base64.b64decode(img_b64)
                 files.append(
                     ('images', (f'image_{i}.jpg', io.BytesIO(image_data), 'image/jpeg'))
+                )
+            
+            # Add audio if provided
+            if audio_b64:
+                audio_data = base64.b64decode(audio_b64)
+                files.append(
+                    ('audio', ('audio.wav', io.BytesIO(audio_data), 'audio/wav'))
                 )
             
             response = requests.post(
@@ -118,6 +133,37 @@ class AIGatewayService:
                 "success": False,
                 "error": str(e)
             }
+
+
+def save_item_images(sku: str, images_b64: List[str]) -> List[str]:
+    """Save base64 images to disk and return URLs"""
+    try:
+        # Create uploads directory if it doesn't exist
+        upload_dir = os.path.join(settings.UPLOAD_DIR, "items", sku)
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        image_urls = []
+        for i, img_b64 in enumerate(images_b64):
+            # Decode base64 image
+            image_data = base64.b64decode(img_b64)
+            
+            # Generate filename
+            filename = f"image_{i+1}_{uuid.uuid4().hex[:8]}.jpg"
+            filepath = os.path.join(upload_dir, filename)
+            
+            # Save image
+            with open(filepath, 'wb') as f:
+                f.write(image_data)
+            
+            # Create URL (relative to static serving)
+            image_url = f"/static/items/{sku}/{filename}"
+            image_urls.append(image_url)
+        
+        return image_urls
+        
+    except Exception as e:
+        logger.error(f"Error saving images for SKU {sku}: {str(e)}")
+        return []
 
 
 class QRCodeService:

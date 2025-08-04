@@ -10,3 +10,4 @@ torchvision>=0.17; platform_system!='Darwin' or platform_machine!='arm64'
 # For macOS arm64 (Apple Silicon), install torch via: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 opencv-python-headless>=4.9
 requests>=2.31
+openai-whisper>=20231117

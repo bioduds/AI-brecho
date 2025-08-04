@@ -44,6 +44,7 @@ class Item(Base):
     flaws = Column(Text)  # defeitos
     title_ig = Column(String)  # AI-generated Instagram title
     tags = Column(Text)  # JSON array of tags
+    summary_title = Column(String)  # AI-generated summary title
     
     # Measurements
     bust = Column(Float)

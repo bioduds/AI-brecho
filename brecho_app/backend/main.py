@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import uuid
 from typing import List
@@ -18,6 +19,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+# Mount static files for image serving
+app.mount("/static", StaticFiles(directory=settings.UPLOAD_DIR), name="static")
 
 # CORS middleware
 app.add_middleware(
@@ -139,7 +143,7 @@ async def ai_intake_autoregister(request: AIIntakeRequest):
             detail="At least 2 images required"
         )
     
-    result = await ai_service.intake_autoregister(request.images)
+    result = await ai_service.intake_autoregister(request.images, request.audio)
     return AIIntakeResponse(
         consignor_id=result.get("consignor_id"),
         proposal=result.get("proposal", {}),
@@ -169,8 +173,8 @@ async def confirm_ai_intake(
         sku, images, proposal.get("cadastro", {})
     )
     
-    # Create item in main database
-    item = create_item_from_ai_proposal(db, sku, proposal, ai_result)
+    # Create item in main database (pass images for saving)
+    item = create_item_from_ai_proposal(db, sku, proposal, ai_result, images)
     
     return {
         "success": True, 

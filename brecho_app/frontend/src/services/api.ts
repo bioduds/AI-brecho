@@ -39,6 +39,7 @@ export interface Item {
     flaws?: string;
     title_ig?: string;
     tags?: string;
+    summary_title?: string;
     bust?: number;
     waist?: number;
     length?: number;
@@ -189,9 +190,10 @@ export const aiAPI = {
         return response.data;
     },
 
-    intakeAutoregister: async (images: string[]): Promise<AIIntakeResponse> => {
+    intakeAutoregister: async (images: string[], audio?: string): Promise<AIIntakeResponse> => {
         const response = await api.post('/ai/intake', {
             images: images,
+            audio: audio,
         });
         return response.data;
     },

@@ -1,6 +1,8 @@
 import requests, json, re, base64
 from io import BytesIO
+from typing import Optional
 from config import OLLAMA_URL, GEMMA_MODEL
+from speech import transcribe_audio, is_whisper_available
 
 SYS_INTAKE = (
 "Você é um especialista em catalogar roupas para brechó brasileiro. "
@@ -32,10 +34,22 @@ def image_to_base64(pil_image):
     return base64.b64encode(img_bytes).decode('utf-8')
 
 
-def ollama_multimodal_analyze(images, prompt: str, system: str = "") -> str:
-    """Análise multimodal usando Ollama com imagens"""
+def ollama_multimodal_analyze(images, prompt: str, system: str = "",
+                              audio_base64: Optional[str] = None) -> str:
+    """Análise multimodal usando Ollama com imagens e opcionalmente áudio"""
     # Converter imagens para base64
     image_data = [image_to_base64(img) for img in images]
+    
+    # Se há áudio, incluir informação no prompt
+    if audio_base64:
+        prompt = f"""IMPORTANTE: O usuário forneceu uma gravação de áudio em português 
+        descrevendo o produto. Embora você não possa processar o áudio diretamente, 
+        use esta informação para dar mais atenção aos detalhes que o usuário 
+        mencionaria verbalmente (como defeitos, características especiais, marca, 
+        materiais específicos, etc.). Analise as imagens com mais cuidado para 
+        capturar todos os detalhes que uma pessoa descreveria ao falar sobre a peça.
+        
+        {prompt}"""
     
     data = {
         "model": GEMMA_MODEL,
@@ -44,6 +58,9 @@ def ollama_multimodal_analyze(images, prompt: str, system: str = "") -> str:
         "stream": False,
         "options": {"temperature": 0.3}
     }
+    
+    # NOTA: Não enviamos áudio diretamente pois o Ollama/Gemma pode não suportar
+    # A informação do áudio está incluída no prompt acima
     
     try:
         r = requests.post(OLLAMA_URL, json=data, timeout=300)  # 5 minutos
@@ -74,8 +91,29 @@ def _parse_json(txt: str) -> dict:
     except Exception:
         return {}
 
-def multimodal_intake_analyze(images) -> dict:
-    """Análise multimodal completa das imagens de roupas"""
+def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dict:
+    """Análise multimodal completa das imagens de roupas e áudio (convertido para texto)"""
+    
+    # Convert audio to text if provided
+    audio_description = ""
+    if audio_base64 and is_whisper_available():
+        try:
+            print(f"Processando áudio: {len(audio_base64)} bytes base64")
+            audio_bytes = base64.b64decode(audio_base64)
+            print(f"Áudio decodificado: {len(audio_bytes)} bytes")
+            transcribed_text = transcribe_audio(audio_bytes)
+            if transcribed_text:
+                audio_description = f"\n\nINFORMAÇÕES ADICIONAIS DO USUÁRIO (via áudio): {transcribed_text}"
+                print(f"Áudio transcrito com sucesso: {transcribed_text}")
+            else:
+                print("Nenhum texto foi transcrito do áudio")
+        except Exception as e:
+            print(f"Erro ao processar áudio: {e}")
+    elif audio_base64:
+        print("Áudio fornecido mas Whisper não está disponível")
+    else:
+        print("Nenhum áudio fornecido")
+    
     prompt = (
         "Analise esta peça de roupa mostrada nas fotos. "
         "Forneça o maior detalhamento possível sobre todos os aspectos que conseguir identificar. "
@@ -87,6 +125,8 @@ def multimodal_intake_analyze(images) -> dict:
         "- Condição atual da peça "
         "- Estilo e modelagem "
         "- Qualquer detalhe relevante que conseguir observar "
+        
+        f"{audio_description}"
         
         "Para precificação em brechó, considere qualidade e condição observadas. "
         "Faixas típicas: básicas R$15-40, intermediárias R$40-120, premium R$100-300+. "
@@ -104,10 +144,11 @@ def multimodal_intake_analyze(images) -> dict:
         "Você é um especialista em análise visual de roupas. "
         "Analise apenas o que consegue ver claramente nas fotos, sem assumir informações. "
         "Seja preciso na identificação de materiais, tipos de peça e condição. "
-        "Condição: A=perfeita, A-=ótima, B=boa com sinais leves, C=visível desgaste."
+        "Condição: A=perfeita, A-=ótima, B=boa com sinais leves, C=visível desgaste. "
+        "Se áudio for fornecido, use as informações faladas para complementar sua análise visual."
     )
     
-    response = ollama_multimodal_analyze(images, prompt, system)
+    response = ollama_multimodal_analyze(images, prompt, system, audio_base64)
     return _parse_json(response)
 
 
