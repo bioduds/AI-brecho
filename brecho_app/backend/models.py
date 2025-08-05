@@ -87,6 +87,25 @@ class Item(Base):
     sales = relationship("Sale", back_populates="item")
 
 
+class ItemDynamicField(Base):
+    """Dynamic fields for items to support various product types"""
+    __tablename__ = "item_dynamic_fields"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_sku = Column(String, ForeignKey("items.sku"), nullable=False)
+    field_name = Column(String, nullable=False)
+    field_value = Column(Text)
+    field_type = Column(String, default="text")  # text, select, number, etc.
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationship
+    item = relationship("Item", back_populates="dynamic_fields")
+
+
+# Add dynamic fields relationship to Item
+Item.dynamic_fields = relationship("ItemDynamicField", back_populates="item", cascade="all, delete-orphan")
+
+
 class Sale(Base):
     __tablename__ = "sales"
     

@@ -31,9 +31,9 @@ fi
 
 # Check if Gemma model is available
 echo "🔍 Checking Gemma model..."
-if ! ollama list | grep -q "gemma2:2b"; then
-    echo "⚠️  Gemma model not found. Installing..."
-    ollama pull gemma2:2b
+if ! ollama list | grep -q "gemma3:4b"; then
+    echo "⚠️  Gemma3:4b model not found. Installing..."
+    ollama pull gemma3:4b
 fi
 
 # Start AI Gateway

@@ -64,7 +64,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Install and run Gemma
-ollama pull gemma2:2b
+ollama pull gemma3:4b
 ollama serve
 
 # Start AI Gateway

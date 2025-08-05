@@ -130,9 +130,9 @@ async def intake_autoregister(
     import base64
     start_time = time.time()
     
-    if len(images) < 2:
+    if len(images) < 1:
         return JSONResponse(
-            {"error": "Envie pelo menos 2 fotos"}, 
+            {"error": "Envie pelo menos 1 foto"},
             status_code=400
         )
 

@@ -206,6 +206,16 @@ export const aiAPI = {
         });
         return response.data;
     },
+
+    getDynamicFields: async (category: string, subcategory?: string, brand?: string, images?: string[]) => {
+        const response = await api.post('/ai/dynamic-fields', {
+            category,
+            subcategory,
+            brand,
+            images,
+        });
+        return response.data;
+    },
 };
 
 export const dashboardAPI = {

@@ -137,10 +137,16 @@ async def ai_search_by_image(request: ImageSearchRequest):
 @app.post(f"{settings.API_V1_STR}/ai/intake", response_model=AIIntakeResponse)
 async def ai_intake_autoregister(request: AIIntakeRequest):
     """Auto-register items using AI analysis of photos"""
-    if len(request.images) < 2:
+    if len(request.images) < 1:
         raise HTTPException(
             status_code=400, 
-            detail="At least 2 images required"
+            detail="At least 1 image required"
+        )
+    
+    if len(request.images) > 10:
+        raise HTTPException(
+            status_code=400, 
+            detail="Maximum 10 images allowed"
         )
     
     result = await ai_service.intake_autoregister(request.images, request.audio)
@@ -179,8 +185,35 @@ async def confirm_ai_intake(
     return {
         "success": True, 
         "item": item, 
-        "ai_indexed": ai_result.get("success", False)
+        "ai_indexed": ai_result.get("success", False) if ai_result else False
     }
+
+
+@app.post(f"{settings.API_V1_STR}/ai/dynamic-fields", response_model=DynamicFieldsResponse)
+async def get_dynamic_fields(request: DynamicFieldsRequest):
+    """Generate dynamic fields for item registration based on category"""
+    from schemas import DynamicFieldsResponse
+    
+    try:
+        result = await ai_service.generate_dynamic_fields(
+            category=request.category,
+            subcategory=request.subcategory,
+            brand=request.brand,
+            images_b64=request.images
+        )
+        
+        return DynamicFieldsResponse(
+            fields=result.get("fields", []),
+            success=result.get("success", True),
+            message=result.get("error")
+        )
+        
+    except Exception as e:
+        return DynamicFieldsResponse(
+            fields=[],
+            success=False,
+            message=str(e)
+        )
 
 
 # QR Code endpoints

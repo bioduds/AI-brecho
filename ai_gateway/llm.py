@@ -5,25 +5,31 @@ from config import OLLAMA_URL, GEMMA_MODEL
 from speech import transcribe_audio, is_whisper_available
 
 SYS_INTAKE = (
-"Você é um especialista em catalogar roupas para brechó brasileiro. "
-"Analise as características visuais das fotos fornecidas e crie uma descrição "
-"completa e detalhada da peça. Use as informações de cores, dimensões e "
-"produtos similares para identificar todos os aspectos da roupa. "
-"Retorne JSON ESTRITO com chaves: "
-'{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem","Cor",'
-'"Tecido","Condição","Defeitos","TituloIG","Tags","DescricaoCompleta"}. '
-"DescricaoCompleta deve ter 2-3 frases descrevendo detalhadamente a peça, "
-"estilo, corte, ocasião de uso e características marcantes. "
-"Condição deve ser: A, A-, B ou C. Use português brasileiro."
+    "Você é um especialista em catalogar QUALQUER TIPO DE ITEM para brechó "
+    "brasileiro. Analise cuidadosamente as fotos fornecidas e identifique "
+    "EXATAMENTE o que é o item. PRIMEIRO identifique se é: roupa, eletrônico, "
+    "decoração, iluminação, móvel, acessório, etc. Depois analise as "
+    "características específicas do item identificado. NUNCA confunda "
+    "categorias - se é uma luminária, NÃO é roupa! "
+    "Retorne JSON ESTRITO com chaves: "
+    '{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem","Cor",'
+    '"Tecido","Condição","Defeitos","TituloIG","Tags","DescricaoCompleta"}. '
+    "DescricaoCompleta deve ter 2-3 frases descrevendo detalhadamente o item, "
+    "suas características, funcionalidades e estado. "
+    "Condição deve ser: A, A-, B ou C. Use português brasileiro. "
 )
 
 SYS_PRICE = (
-"Você é um especialista em precificação de brechó premium em Belo Horizonte. "
-"Analise a categoria, qualidade do tecido, marca, condição e tipo de peça. "
-"Considere que é um brechó de qualidade que atende classe média/alta. "
-"Faixas referenciais: Básicas R$15-40, Qualidade R$40-120, Premium R$100-300+. "
-"Para moletom/tricot de qualidade em bom estado: mínimo R$40-80. "
-"Retorne JSON: {'Faixa':'R$min–R$max','Motivo':'justificativa detalhada'}"
+    "Você é um especialista em precificação de brechó premium em Belo "
+    "Horizonte. Analise o tipo de item, categoria, marca, condição e "
+    "qualidade do produto. ADAPTE os preços baseado no tipo de item: "
+    "ROUPAS - Básicas R$15-40, Qualidade R$40-120, Premium R$100-300+. "
+    "ELETRÔNICOS - Funcionais R$20-80, Qualidade R$50-200, Premium R$150+. "
+    "DECORAÇÃO - Simples R$10-30, Elaborada R$30-100, Artística R$80+. "
+    "ILUMINAÇÃO - Básica R$25-60, Design R$60-180, Premium R$150+. "
+    "Considere: marca, estado, funcionalidade, design, raridade. "
+    "Retorne JSON: {'Faixa':'R$min–R$max','Motivo':'justificativa "
+    "detalhada baseada no tipo de item'}"
 )
 
 def image_to_base64(pil_image):
@@ -92,7 +98,7 @@ def _parse_json(txt: str) -> dict:
         return {}
 
 def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dict:
-    """Análise multimodal completa das imagens de roupas e áudio (convertido para texto)"""
+    """Análise multimodal completa das imagens e áudio (convertido para texto)"""
     
     # Convert audio to text if provided
     audio_description = ""
@@ -115,37 +121,42 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         print("Nenhum áudio fornecido")
     
     prompt = (
-        "Analise esta peça de roupa mostrada nas fotos. "
-        "Forneça o maior detalhamento possível sobre todos os aspectos que conseguir identificar. "
+        "Analise CUIDADOSAMENTE as imagens fornecidas e identifique EXATAMENTE que tipo de item é. "
+        "PRIMEIRO determine se é: roupa, eletrônico, decoração, iluminação, móvel, acessório, etc. "
+        "DEPOIS analise as características específicas do item identificado. "
         
         "Examine e descreva: "
-        "- Que tipo de peça é (categoria específica) "
-        "- Material/tecido que aparenta ser "
+        "- Que tipo exato de item é (categoria específica) "
+        "- Material principal que aparenta ser "
         "- Cor e características visuais "
-        "- Condição atual da peça "
-        "- Estilo e modelagem "
+        "- Condição atual do item "
+        "- Estilo e formato "
         "- Qualquer detalhe relevante que conseguir observar "
         
         f"{audio_description}"
         
-        "Para precificação em brechó, considere qualidade e condição observadas. "
-        "Faixas típicas: básicas R$15-40, intermediárias R$40-120, premium R$100-300+. "
+        "IMPORTANTE: Seja CONSISTENTE em todas as descrições. Use o mesmo contexto e características "
+        "para todas as seções (DescricaoCompleta, RelatorioDetalhado, etc.). "
         
         "Retorne JSON com: "
         '{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem",'
         '"Cor","Tecido","Condição","Defeitos","TituloIG","Tags",'
         '"DescricaoCompleta","RelatorioDetalhado","ValorEstimado"}. '
         
-        "RelatorioDetalhado: análise completa do que observou na peça, "
-        "incluindo tipo, material, condição e justificativa do valor."
+        "DescricaoCompleta: 2-3 frases sobre o item, suas características e uso. "
+        "RelatorioDetalhado: análise técnica completa do item observado. "
+        "ValorEstimado: faixa de preço estimada baseada no tipo e condição."
     )
     
     system = (
-        "Você é um especialista em análise visual de roupas. "
+        "Você é um especialista em análise de QUALQUER tipo de item para brechó. "
         "Analise apenas o que consegue ver claramente nas fotos, sem assumir informações. "
-        "Seja preciso na identificação de materiais, tipos de peça e condição. "
+        "NUNCA confunda categorias - se é uma luminária, NÃO é roupa! "
+        "Seja preciso na identificação de materiais, tipos e condição. "
         "Condição: A=perfeita, A-=ótima, B=boa com sinais leves, C=visível desgaste. "
-        "Se áudio for fornecido, use as informações faladas para complementar sua análise visual."
+        "Para itens que não são roupas: Gênero='Unissex', Tamanho=dimensões/tamanho do objeto, "
+        "Tecido=material principal, Modelagem=formato/estilo. "
+        "Mantenha CONSISTÊNCIA em todas as descrições do mesmo item."
     )
     
     response = ollama_multimodal_analyze(images, prompt, system, audio_base64)

@@ -63,9 +63,9 @@ npm start
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Baixar modelo Gemma 3:4b
-ollama pull gemma2:2b
+ollama pull gemma3:4b
 # ou
-ollama pull llava:7b  # Para análise multimodal
+ollama pull llama3.2:latest
 ```
 
 ## 🤖 Funcionalidades da IA

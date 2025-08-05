@@ -153,6 +153,20 @@ class AIIntakeResponse(BaseModel):
     similar_items: List[dict]
     success: bool
     message: Optional[str] = None
+    dynamic_fields: Optional[dict] = None  # New field for dynamic fields
+
+
+class DynamicFieldsRequest(BaseModel):
+    category: str
+    subcategory: Optional[str] = None
+    brand: Optional[str] = None
+    images: Optional[List[str]] = None  # Base64 images for analysis
+
+
+class DynamicFieldsResponse(BaseModel):
+    fields: List[dict]  # Dynamic field definitions
+    success: bool = True
+    message: Optional[str] = None
 
 
 class ImageSearchRequest(BaseModel):

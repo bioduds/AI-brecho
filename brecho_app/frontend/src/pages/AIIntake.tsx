@@ -48,6 +48,8 @@ const AIIntake: React.FC = () => {
     const [editableData, setEditableData] = useState<any>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [selectedConsignor, setSelectedConsignor] = useState<string>('');
+    const [dynamicFields, setDynamicFields] = useState<any[]>([]);
+    const [dynamicFieldsValues, setDynamicFieldsValues] = useState<Record<string, any>>({});
 
     // Audio recording states
     const [isRecording, setIsRecording] = useState(false);
@@ -79,7 +81,7 @@ const AIIntake: React.FC = () => {
         accept: {
             'image/*': ['.jpeg', '.jpg', '.png', '.webp']
         },
-        maxFiles: 6,
+        maxFiles: 10,
         multiple: true,
     });
 
@@ -179,7 +181,7 @@ const AIIntake: React.FC = () => {
     }, []);
 
     const handleAIAnalysis = async () => {
-        if (selectedFiles.length < 2) return;
+        if (selectedFiles.length < 1) return;
 
         setLoading(true);
         setError(null);
@@ -275,17 +277,40 @@ const AIIntake: React.FC = () => {
                 }
             };
             setAiResponse(updatedResponse);
-            setIsEditing(false);
+            // NÃO esconder os campos após salvar - manter visíveis para mais edições
+            // setIsEditing(false);
         }
     };
 
     const renderEditableFields = () => {
         if (!editableData || !isEditing) return null;
 
-        const categorias = ['Blusa', 'Vestido', 'Calça', 'Saia', 'Casaco', 'Moletom', 'Tricot', 'Camisa', 'Outros'];
+        const categorias = [
+            // Roupas
+            'Blusa', 'Vestido', 'Calça', 'Saia', 'Casaco', 'Moletom', 'Tricot', 'Camisa',
+            // Casa e Decoração
+            'Iluminação', 'Luminária', 'Abajur', 'Decoração', 'Móveis', 'Quadros',
+            // Eletrônicos
+            'Eletrônicos', 'Eletrodomésticos',
+            // Acessórios
+            'Bolsas', 'Sapatos', 'Cintos', 'Joias', 'Óculos',
+            // Livros e Mídia
+            'Livros', 'CDs', 'DVDs',
+            // Outros
+            'Brinquedos', 'Esportes', 'Instrumentos', 'Outros'
+        ];
         const condicoes = ['A', 'A-', 'B', 'C'];
         const generos = ['Feminino', 'Masculino', 'Unissex'];
-        const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'XGG', '34', '36', '38', '40', '42', '44', '46'];
+        const tamanhos = [
+            // Tamanhos de roupa
+            'PP', 'P', 'M', 'G', 'GG', 'XGG', '34', '36', '38', '40', '42', '44', '46',
+            // Tamanhos de objetos
+            'Pequeno', 'Médio', 'Grande', 'Extra Grande',
+            // Dimensões aproximadas
+            'Até 20cm', '20-40cm', '40-60cm', '60-100cm', 'Acima de 100cm',
+            // Outros
+            'Único', 'Variável', 'Não se aplica'
+        ];
 
         return (
             <Box sx={{ mt: 2 }}>
@@ -509,6 +534,102 @@ const AIIntake: React.FC = () => {
         );
     };
 
+    // Load dynamic fields when category changes
+    const loadDynamicFields = async (category: string, subcategory?: string, brand?: string) => {
+        try {
+            const base64Images = await Promise.all(
+                selectedFiles.map(file => convertToBase64(file))
+            );
+
+            const response = await aiAPI.getDynamicFields(category, subcategory, brand, base64Images);
+            if (response.success) {
+                setDynamicFields(response.fields || []);
+                setDynamicFieldsValues({}); // Reset values
+            }
+        } catch (error) {
+            console.error('Error loading dynamic fields:', error);
+            setDynamicFields([]);
+        }
+    };
+
+    // Handle dynamic field changes
+    const handleDynamicFieldChange = (fieldName: string, value: any) => {
+        setDynamicFieldsValues(prev => ({
+            ...prev,
+            [fieldName]: value
+        }));
+    };
+
+    // Render dynamic field component
+    const renderDynamicField = (field: any, index: number) => {
+        const value = dynamicFieldsValues[field.name] || '';
+
+        switch (field.type) {
+            case 'select':
+                return (
+                    <FormControl key={field.name} fullWidth size="small" sx={{ mb: 2 }}>
+                        <InputLabel>{field.label}</InputLabel>
+                        <Select
+                            value={value}
+                            label={field.label}
+                            onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                        >
+                            {field.options?.map((option: string) => (
+                                <MenuItem key={option} value={option}>
+                                    {option}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                );
+
+            case 'text':
+                return (
+                    <TextField
+                        key={field.name}
+                        fullWidth
+                        size="small"
+                        label={field.label}
+                        placeholder={field.placeholder}
+                        value={value}
+                        onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                        sx={{ mb: 2 }}
+                        required={field.required}
+                    />
+                );
+
+            case 'number':
+                return (
+                    <TextField
+                        key={field.name}
+                        fullWidth
+                        size="small"
+                        type="number"
+                        label={field.label}
+                        placeholder={field.placeholder}
+                        value={value}
+                        onChange={(e) => handleDynamicFieldChange(field.name, parseFloat(e.target.value) || 0)}
+                        sx={{ mb: 2 }}
+                        required={field.required}
+                    />
+                );
+
+            default:
+                return null;
+        }
+    };
+
+    // Load dynamic fields when AI response changes
+    useEffect(() => {
+        if (aiResponse?.proposal?.cadastro?.Categoria) {
+            loadDynamicFields(
+                aiResponse.proposal.cadastro.Categoria,
+                aiResponse.proposal.cadastro.Subcategoria,
+                aiResponse.proposal.cadastro.Marca
+            );
+        }
+    }, [aiResponse]);
+
     const handleConfirmIntake = async () => {
         if (!aiResponse) return;
         if (!selectedConsignor) {
@@ -521,14 +642,16 @@ const AIIntake: React.FC = () => {
                 selectedFiles.map(file => convertToBase64(file))
             );
 
-            // Adicionar consignante à proposta
+            // Adicionar consignante e campos dinâmicos à proposta
             const proposalWithConsignor = {
                 ...aiResponse.proposal,
                 consignor_id: selectedConsignor,
                 cadastro: {
                     ...aiResponse.proposal.cadastro,
-                    ConsignanteId: selectedConsignor
-                }
+                    ConsignanteId: selectedConsignor,
+                    ...dynamicFieldsValues  // Add dynamic fields values
+                },
+                dynamic_fields: dynamicFieldsValues  // Also store separately for reference
             };
 
             await aiAPI.confirmIntake(
@@ -580,13 +703,23 @@ const AIIntake: React.FC = () => {
             </Typography>
 
             <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-                Envie 2-6 fotos dos itens. A IA irá identificar automaticamente a categoria, marca,
-                tamanho, condição e sugerir preços. Certifique-se de incluir o QR do consignante nas fotos.
+                Envie 1-10 fotos dos itens para análise inteligente. A IA identifica automaticamente categoria, marca,
+                tamanho, condição e sugere preços. Inclua o QR do consignante nas fotos e use o áudio para fornecer
+                informações adicionais sobre tecido, defeitos, história do item ou qualquer detalhe relevante.
             </Typography>
 
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+            <Box sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', md: aiResponse ? 'column' : 'row' },
+                gap: 3,
+                transition: 'all 0.3s ease-in-out'
+            }}>
                 {/* Upload Area */}
-                <Box sx={{ flex: 1 }}>
+                <Box sx={{
+                    flex: 1,
+                    display: aiResponse ? 'none' : 'block',
+                    transition: 'all 0.3s ease-in-out'
+                }}>
                     <Card>
                         <CardContent>
                             <Typography variant="h6" gutterBottom>
@@ -612,7 +745,7 @@ const AIIntake: React.FC = () => {
                                     {isDragActive ? 'Solte as fotos aqui' : 'Arraste fotos ou clique para selecionar'}
                                 </Typography>
                                 <Typography variant="body2" color="textSecondary">
-                                    Máximo 6 fotos (JPEG, PNG, WebP)
+                                    Máximo 10 fotos (JPEG, PNG, WebP)
                                 </Typography>
                             </Paper>
 
@@ -620,7 +753,7 @@ const AIIntake: React.FC = () => {
                             {previews.length > 0 && (
                                 <Box>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        Fotos Selecionadas ({previews.length}/6):
+                                        Fotos Selecionadas ({previews.length}/10):
                                     </Typography>
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                                         {previews.map((preview, index) => (
@@ -647,7 +780,8 @@ const AIIntake: React.FC = () => {
                                     Gravação de Áudio (Opcional)
                                 </Typography>
                                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Grave detalhes sobre o produto em português
+                                    Grave informações adicionais: tecido, defeitos, história do item, detalhes sobre
+                                    o consignante, ou qualquer informação que possa ajudar na análise inteligente.
                                 </Typography>
 
                                 <Stack direction="row" spacing={2} alignItems="center">
@@ -700,22 +834,37 @@ const AIIntake: React.FC = () => {
                                 variant="contained"
                                 size="large"
                                 onClick={handleAIAnalysis}
-                                disabled={selectedFiles.length < 2 || loading}
+                                disabled={selectedFiles.length < 1 || loading || isRecording}
                                 sx={{ mt: 2 }}
                                 startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
                             >
-                                {loading ? 'Analisando com IA...' : 'Analisar com IA'}
+                                {isRecording ? 'Gravação em andamento...' :
+                                    loading ? 'Analisando com IA...' : 'Analisar com IA'}
                             </Button>
                         </CardContent>
                     </Card>
                 </Box>
 
                 {/* AI Results */}
-                <Box sx={{ flex: 1 }}>
+                {/* Results Area */}
+                <Box sx={{
+                    flex: aiResponse ? 1 : 1,
+                    width: aiResponse ? '100%' : 'auto',
+                    transition: 'all 0.3s ease-in-out'
+                }}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Resultado da Análise IA
+                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <AutoAwesome color="primary" />
+                                Cadastro Inteligente
+                                {aiResponse && (
+                                    <Chip
+                                        label="IA Ativa"
+                                        size="small"
+                                        color="success"
+                                        variant="outlined"
+                                    />
+                                )}
                             </Typography>
 
                             {error && (
@@ -831,6 +980,33 @@ const AIIntake: React.FC = () => {
                                                     />
                                                 </Box>
                                             )}
+                                        </Box>
+                                    )}
+
+                                    {/* Dynamic Fields Section */}
+                                    {dynamicFields.length > 0 && (
+                                        <Box sx={{ mt: 3 }}>
+                                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <AutoAwesome color="secondary" />
+                                                Campos Inteligentes
+                                                <Chip
+                                                    label={`${dynamicFields.length} campos`}
+                                                    size="small"
+                                                    color="secondary"
+                                                    variant="outlined"
+                                                />
+                                            </Typography>
+                                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                                Campos adicionais gerados com base na categoria e análise do item
+                                            </Typography>
+
+                                            <Box sx={{
+                                                display: 'grid',
+                                                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                                                gap: 2
+                                            }}>
+                                                {dynamicFields.map((field, index) => renderDynamicField(field, index))}
+                                            </Box>
                                         </Box>
                                     )}
 

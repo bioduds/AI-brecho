@@ -59,9 +59,11 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
                                   ai_result: dict, images_b64: list = None):
     """Create item from AI intake proposal"""
     from ai_services import save_item_images
+    from models import ItemDynamicField
     
     cadastro = proposal.get("cadastro", {})
     price_info = proposal.get("price", {})
+    dynamic_fields = proposal.get("dynamic_fields", {})
     
     # Parse price range if available
     list_price = None
@@ -102,7 +104,9 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
                    if photo_urls else None),  # Store as comma-separated URLs
         "list_price": list_price,
         "ai_confidence": 0.8,  # Default confidence
-        "ai_similar_items": json.dumps(ai_result.get("similar_items", [])),
+        "ai_similar_items": json.dumps(
+            ai_result.get("similar_items", []) if ai_result else []
+        ),
         "notes": f"AI Auto-intake: {price_info.get('Motivo', '')}",
         "summary_title": summary_title  # Add summary title
     }
@@ -111,6 +115,21 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
+    
+    # Save dynamic fields
+    if dynamic_fields:
+        for field_name, field_value in dynamic_fields.items():
+            if field_value:  # Only save non-empty values
+                dynamic_field = ItemDynamicField(
+                    item_sku=sku,
+                    field_name=field_name,
+                    field_value=str(field_value),
+                    field_type="text"  # Could be enhanced to detect type
+                )
+                db.add(dynamic_field)
+        
+        db.commit()
+    
     return db_item
 
 
