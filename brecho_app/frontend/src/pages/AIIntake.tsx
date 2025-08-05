@@ -200,27 +200,39 @@ const AIIntake: React.FC = () => {
             const response = await aiAPI.intakeAutoregister(base64Images, audioBase64);
             setAiResponse(response);
 
-            // Inicializar dados editáveis
-            setEditableData({
-                categoria: response.proposal.cadastro.Categoria || '',
-                subcategoria: response.proposal.cadastro.Subcategoria || '',
-                marca: response.proposal.cadastro.Marca || '',
-                genero: response.proposal.cadastro.Gênero || '',
-                tamanho: response.proposal.cadastro.Tamanho || '',
-                modelagem: response.proposal.cadastro.Modelagem || '',
-                cor: response.proposal.cadastro.Cor || '',
-                tecido: response.proposal.cadastro.Tecido || '',
-                condicao: response.proposal.cadastro.Condição || '',
-                defeitos: response.proposal.cadastro.Defeitos || '',
-                tituloIG: response.proposal.cadastro.TituloIG || '',
-                tags: response.proposal.cadastro.Tags || '',
-                descricaoCompleta: response.proposal.descricao_completa || '',
-                relatorioDetalhado: response.proposal.relatorio_detalhado || '',
-                valorEstimado: response.proposal.valor_estimado || '',
-                precoMin: response.proposal.price.Faixa?.split('–')[0]?.replace('R$', '') || '',
-                precoMax: response.proposal.price.Faixa?.split('–')[1]?.replace('R$', '') || '',
-                motivoPreco: response.proposal.price.Motivo || ''
-            });
+            // Inicializar dados editáveis de forma DINÂMICA
+            // A IA agora retorna campos personalizados baseados no tipo de item
+            const dynamicData: any = {};
+
+            // Processar todos os campos que a IA retornou
+            if (response.proposal.cadastro) {
+                Object.keys(response.proposal.cadastro).forEach(key => {
+                    // Converter chaves para formato camelCase
+                    const camelKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/[àáâãäçèéêëìíîïñòóôõöùúûü]/g, (char) => {
+                        const map: any = {
+                            'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+                            'ç': 'c',
+                            'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+                            'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+                            'ñ': 'n',
+                            'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+                            'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u'
+                        };
+                        return map[char] || char;
+                    });
+                    dynamicData[camelKey] = response.proposal.cadastro[key] || '';
+                });
+            }
+
+            // Adicionar campos de preço se disponíveis
+            if (response.proposal.price?.Faixa) {
+                const faixa = response.proposal.price.Faixa;
+                dynamicData.precoMin = faixa.split('–')[0]?.replace('R$', '').trim() || '';
+                dynamicData.precoMax = faixa.split('–')[1]?.replace('R$', '').trim() || '';
+                dynamicData.motivoPreco = response.proposal.price.Motivo || '';
+            }
+
+            setEditableData(dynamicData);
 
             // Abrir edição automaticamente
             setIsEditing(true);
@@ -285,32 +297,57 @@ const AIIntake: React.FC = () => {
     const renderEditableFields = () => {
         if (!editableData || !isEditing) return null;
 
-        const categorias = [
-            // Roupas
-            'Blusa', 'Vestido', 'Calça', 'Saia', 'Casaco', 'Moletom', 'Tricot', 'Camisa',
-            // Casa e Decoração
-            'Iluminação', 'Luminária', 'Abajur', 'Decoração', 'Móveis', 'Quadros',
-            // Eletrônicos
-            'Eletrônicos', 'Eletrodomésticos',
-            // Acessórios
-            'Bolsas', 'Sapatos', 'Cintos', 'Joias', 'Óculos',
-            // Livros e Mídia
-            'Livros', 'CDs', 'DVDs',
-            // Outros
-            'Brinquedos', 'Esportes', 'Instrumentos', 'Outros'
-        ];
-        const condicoes = ['A', 'A-', 'B', 'C'];
-        const generos = ['Feminino', 'Masculino', 'Unissex'];
-        const tamanhos = [
-            // Tamanhos de roupa
-            'PP', 'P', 'M', 'G', 'GG', 'XGG', '34', '36', '38', '40', '42', '44', '46',
-            // Tamanhos de objetos
-            'Pequeno', 'Médio', 'Grande', 'Extra Grande',
-            // Dimensões aproximadas
-            'Até 20cm', '20-40cm', '40-60cm', '60-100cm', 'Acima de 100cm',
-            // Outros
-            'Único', 'Variável', 'Não se aplica'
-        ];
+        // Função para converter camelCase para título
+        const camelToTitle = (str: string) => {
+            return str
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .replace(/([a-z])([A-Z])/g, '$1 $2');
+        };
+
+        // Função para determinar o tipo de campo baseado na chave
+        const getFieldType = (key: string, value: any) => {
+            const lowerKey = key.toLowerCase();
+
+            if (lowerKey.includes('categoria')) {
+                return {
+                    type: 'select',
+                    options: ['Blusa', 'Vestido', 'Calça', 'Saia', 'Casaco', 'Moletom', 'Tricot', 'Camisa',
+                        'Iluminação', 'Luminária', 'Abajur', 'Decoração', 'Móveis', 'Quadros',
+                        'Eletrônicos', 'Eletrodomésticos', 'Bolsas', 'Sapatos', 'Cintos', 'Joias', 'Óculos',
+                        'Livros', 'CDs', 'DVDs', 'Brinquedos', 'Esportes', 'Instrumentos', 'Outros']
+                };
+            }
+            if (lowerKey.includes('condicao') || lowerKey.includes('condição')) {
+                return { type: 'select', options: ['A', 'A-', 'B', 'C'] };
+            }
+            if (lowerKey.includes('genero') || lowerKey.includes('gênero')) {
+                return { type: 'select', options: ['Feminino', 'Masculino', 'Unissex'] };
+            }
+            if (lowerKey.includes('tamanho')) {
+                return {
+                    type: 'select',
+                    options: ['PP', 'P', 'M', 'G', 'GG', 'XGG', '34', '36', '38', '40', '42', '44', '46',
+                        'Pequeno', 'Médio', 'Grande', 'Extra Grande', 'Único', 'Variado']
+                };
+            }
+            if (lowerKey.includes('cor')) {
+                return { type: 'text' };
+            }
+            if (lowerKey.includes('descricao') || lowerKey.includes('relatorio') || lowerKey.includes('defeitos')) {
+                return { type: 'multiline' };
+            }
+            if (lowerKey.includes('preco') || lowerKey.includes('preço') || lowerKey.includes('valor')) {
+                return { type: 'text', inputProps: { type: 'number' } };
+            }
+
+            return { type: 'text' };
+        };
+
+        // Renderizar campos dinamicamente
+        const fieldEntries = Object.entries(editableData).filter(([key]) =>
+            !['precoMin', 'precoMax', 'motivoPreco'].includes(key)
+        );
 
         return (
             <Box sx={{ mt: 2 }}>
@@ -319,716 +356,794 @@ const AIIntake: React.FC = () => {
                 </Typography>
 
                 <Stack spacing={2}>
-                    {/* Campo de Consignante com Autocomplete */}
-                    <Autocomplete
-                        fullWidth
-                        size="small"
-                        options={consignors}
-                        getOptionLabel={(option) => `${option.name} (${option.id})`}
-                        value={selectedConsignorObj}
-                        onChange={(_, newValue) => {
-                            setSelectedConsignorObj(newValue);
-                            setSelectedConsignor(newValue?.id || '');
-                        }}
-                        loading={consignorLoading}
-                        renderInput={(params) => (
-                            <TextField
-                                {...params}
-                                label="Consignante"
-                                placeholder="Busque por nome ou ID"
-                                helperText="Obrigatório para gerar etiqueta com QR code"
-                                InputProps={{
-                                    ...params.InputProps,
-                                    endAdornment: (
-                                        <>
-                                            {consignorLoading ? <CircularProgress size={20} /> : null}
-                                            {params.InputProps.endAdornment}
-                                        </>
-                                    ),
-                                }}
-                            />
-                        )}
-                    />
+                    {fieldEntries.map(([key, value], index) => {
+                        const fieldConfig = getFieldType(key, value);
+                        const label = camelToTitle(key);
 
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Categoria</InputLabel>
-                            <Select
-                                value={editableData.categoria}
-                                label="Categoria"
-                                onChange={(e) => handleEditChange('categoria', e.target.value)}
-                            >
-                                {categorias.map(cat => (
-                                    <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        if (fieldConfig.type === 'select') {
+                            return (
+                                <FormControl key={key} fullWidth size="small">
+                                    <InputLabel>{label}</InputLabel>
+                                    <Select
+                                        value={value || ''}
+                                        label={label}
+                                        onChange={(e) => handleEditChange(key, e.target.value)}
+                                    >
+                                        {fieldConfig.options?.map(option => (
+                                            <MenuItem key={option} value={option}>{option}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            );
+                        } else if (fieldConfig.type === 'multiline') {
+                            return (
+                                <TextField
+                                    key={key}
+                                    fullWidth
+                                    multiline
+                                    rows={3}
+                                    size="small"
+                                    label={label}
+                                    value={value || ''}
+                                    onChange={(e) => handleEditChange(key, e.target.value)}
+                                />
+                            );
+                        } else {
+                            return (
+                                <TextField
+                                    key={key}
+                                    fullWidth
+                                    size="small"
+                                    label={label}
+                                    value={value || ''}
+                                    onChange={(e) => handleEditChange(key, e.target.value)}
+                                    {...(fieldConfig.inputProps || {})}
+                                />
+                            );
+                        }
+                    })}
 
-                        <TextField
-                            fullWidth
-                            size="small"
-                            label="Subcategoria"
-                            value={editableData.subcategoria}
-                            onChange={(e) => handleEditChange('subcategoria', e.target.value)}
-                        />
-                    </Stack>
-
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            label="Marca"
-                            value={editableData.marca}
-                            onChange={(e) => handleEditChange('marca', e.target.value)}
-                        />
-
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Gênero</InputLabel>
-                            <Select
-                                value={editableData.genero}
-                                label="Gênero"
-                                onChange={(e) => handleEditChange('genero', e.target.value)}
-                            >
-                                {generos.map(gen => (
-                                    <MenuItem key={gen} value={gen}>{gen}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Stack>
-
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Tamanho</InputLabel>
-                            <Select
-                                value={editableData.tamanho}
-                                label="Tamanho"
-                                onChange={(e) => handleEditChange('tamanho', e.target.value)}
-                            >
-                                {tamanhos.map(tam => (
-                                    <MenuItem key={tam} value={tam}>{tam}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-
-                        <TextField
-                            fullWidth
-                            size="small"
-                            label="Cor"
-                            value={editableData.cor}
-                            onChange={(e) => handleEditChange('cor', e.target.value)}
-                        />
-
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Condição</InputLabel>
-                            <Select
-                                value={editableData.condicao}
-                                label="Condição"
-                                onChange={(e) => handleEditChange('condicao', e.target.value)}
-                            >
-                                {condicoes.map(cond => (
-                                    <MenuItem key={cond} value={cond}>{cond}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Stack>
-
-                    <TextField
-                        fullWidth
-                        size="small"
-                        label="Tecido"
-                        value={editableData.tecido}
-                        onChange={(e) => handleEditChange('tecido', e.target.value)}
-                    />
-
-                    <TextField
-                        fullWidth
-                        size="small"
-                        label="Defeitos"
-                        value={editableData.defeitos}
-                        onChange={(e) => handleEditChange('defeitos', e.target.value)}
-                    />
-
+                    {/* Campos de preço separados */}
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <TextField
                             fullWidth
                             size="small"
                             label="Preço Mínimo (R$)"
                             type="number"
-                            value={editableData.precoMin}
+                            value={editableData.precoMin || ''}
                             onChange={(e) => handleEditChange('precoMin', e.target.value)}
                         />
-
                         <TextField
                             fullWidth
                             size="small"
                             label="Preço Máximo (R$)"
                             type="number"
-                            value={editableData.precoMax}
+                            value={editableData.precoMax || ''}
                             onChange={(e) => handleEditChange('precoMax', e.target.value)}
                         />
                     </Stack>
-
-                    <TextField
-                        fullWidth
-                        multiline
-                        rows={2}
-                        size="small"
-                        label="Descrição Completa"
-                        value={editableData.descricaoCompleta}
-                        onChange={(e) => handleEditChange('descricaoCompleta', e.target.value)}
-                    />
-
-                    <TextField
-                        fullWidth
-                        multiline
-                        rows={3}
-                        size="small"
-                        label="Relatório Detalhado"
-                        value={editableData.relatorioDetalhado}
-                        onChange={(e) => handleEditChange('relatorioDetalhado', e.target.value)}
-                    />
                 </Stack>
-
-                <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                    <Button
-                        variant="contained"
-                        onClick={handleSaveChanges}
-                        size="small"
-                        color="primary"
-                    >
-                        Aplicar Alterações
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        onClick={() => {
-                            // Reset para dados originais da IA
-                            if (aiResponse) {
-                                setEditableData({
-                                    categoria: aiResponse.proposal.cadastro.Categoria || '',
-                                    subcategoria: aiResponse.proposal.cadastro.Subcategoria || '',
-                                    marca: aiResponse.proposal.cadastro.Marca || '',
-                                    genero: aiResponse.proposal.cadastro.Gênero || '',
-                                    tamanho: aiResponse.proposal.cadastro.Tamanho || '',
-                                    modelagem: aiResponse.proposal.cadastro.Modelagem || '',
-                                    cor: aiResponse.proposal.cadastro.Cor || '',
-                                    tecido: aiResponse.proposal.cadastro.Tecido || '',
-                                    condicao: aiResponse.proposal.cadastro.Condição || '',
-                                    defeitos: aiResponse.proposal.cadastro.Defeitos || '',
-                                    tituloIG: aiResponse.proposal.cadastro.TituloIG || '',
-                                    tags: aiResponse.proposal.cadastro.Tags || '',
-                                    descricaoCompleta: aiResponse.proposal.descricao_completa || '',
-                                    relatorioDetalhado: aiResponse.proposal.relatorio_detalhado || '',
-                                    valorEstimado: aiResponse.proposal.valor_estimado || '',
-                                    precoMin: aiResponse.proposal.price.Faixa?.split('–')[0]?.replace('R$', '') || '',
-                                    precoMax: aiResponse.proposal.price.Faixa?.split('–')[1]?.replace('R$', '') || '',
-                                    motivoPreco: aiResponse.proposal.price.Motivo || ''
-                                });
-                            }
-                        }}
-                        size="small"
-                    >
-                        Restaurar Original
-                    </Button>
-                </Box>
             </Box>
-        );
-    };
-
-    // Load dynamic fields when category changes
-    const loadDynamicFields = async (category: string, subcategory?: string, brand?: string) => {
-        try {
-            const base64Images = await Promise.all(
-                selectedFiles.map(file => convertToBase64(file))
-            );
-
-            const response = await aiAPI.getDynamicFields(category, subcategory, brand, base64Images);
-            if (response.success) {
-                setDynamicFields(response.fields || []);
-                setDynamicFieldsValues({}); // Reset values
-            }
-        } catch (error) {
-            console.error('Error loading dynamic fields:', error);
-            setDynamicFields([]);
-        }
-    };
-
-    // Handle dynamic field changes
-    const handleDynamicFieldChange = (fieldName: string, value: any) => {
-        setDynamicFieldsValues(prev => ({
-            ...prev,
-            [fieldName]: value
-        }));
-    };
-
-    // Render dynamic field component
-    const renderDynamicField = (field: any, index: number) => {
-        const value = dynamicFieldsValues[field.name] || '';
-
-        switch (field.type) {
-            case 'select':
-                return (
-                    <FormControl key={field.name} fullWidth size="small" sx={{ mb: 2 }}>
-                        <InputLabel>{field.label}</InputLabel>
-                        <Select
-                            value={value}
-                            label={field.label}
-                            onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
-                        >
-                            {field.options?.map((option: string) => (
-                                <MenuItem key={option} value={option}>
-                                    {option}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                );
-
-            case 'text':
-                return (
-                    <TextField
-                        key={field.name}
-                        fullWidth
-                        size="small"
-                        label={field.label}
-                        placeholder={field.placeholder}
-                        value={value}
-                        onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
-                        sx={{ mb: 2 }}
-                        required={field.required}
-                    />
-                );
-
-            case 'number':
-                return (
-                    <TextField
-                        key={field.name}
-                        fullWidth
-                        size="small"
-                        type="number"
-                        label={field.label}
-                        placeholder={field.placeholder}
-                        value={value}
-                        onChange={(e) => handleDynamicFieldChange(field.name, parseFloat(e.target.value) || 0)}
-                        sx={{ mb: 2 }}
-                        required={field.required}
-                    />
-                );
-
-            default:
-                return null;
-        }
-    };
-
-    // Load dynamic fields when AI response changes
-    useEffect(() => {
-        if (aiResponse?.proposal?.cadastro?.Categoria) {
-            loadDynamicFields(
-                aiResponse.proposal.cadastro.Categoria,
-                aiResponse.proposal.cadastro.Subcategoria,
-                aiResponse.proposal.cadastro.Marca
-            );
-        }
-    }, [aiResponse]);
-
-    const handleConfirmIntake = async () => {
-        if (!aiResponse) return;
-        if (!selectedConsignor) {
-            setError('ID do consignante é obrigatório para cadastrar o item');
-            return;
-        }
-
-        try {
-            const base64Images = await Promise.all(
-                selectedFiles.map(file => convertToBase64(file))
-            );
-
-            // Adicionar consignante e campos dinâmicos à proposta
-            const proposalWithConsignor = {
-                ...aiResponse.proposal,
-                consignor_id: selectedConsignor,
-                cadastro: {
-                    ...aiResponse.proposal.cadastro,
-                    ConsignanteId: selectedConsignor,
-                    ...dynamicFieldsValues  // Add dynamic fields values
-                },
-                dynamic_fields: dynamicFieldsValues  // Also store separately for reference
-            };
-
-            await aiAPI.confirmIntake(
-                aiResponse.proposal.sku,
-                proposalWithConsignor,
-                base64Images
-            );
-
-            // Reset form
-            setSelectedFiles([]);
-            setPreviews([]);
-            setAiResponse(null);
-            setEditableData(null);
-            setIsEditing(false);
-            setSelectedConsignor('');
-            setSelectedConsignorObj(null);
-
-            // Reset audio
-            clearAudio();
-
-            alert('Item cadastrado com sucesso! Etiqueta com QR code pode ser impressa.');
-        } catch (err) {
-            setError('Erro ao confirmar cadastro');
-            console.error('Erro detalhado:', err);
-        }
-    };
-
-    const renderConditionChip = (condition: string) => {
-        const colors: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-            'A': 'success',
-            'A-': 'warning',
-            'B': 'warning',
-            'C': 'error',
-        };
-        return (
-            <Chip
-                label={`Condição: ${condition}`}
-                color={colors[condition] || 'default'}
-                size="small"
-            />
         );
     };
 
     return (
-        <Box sx={{ p: 2 }}>
-            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AutoAwesome color="primary" />
-                AI Intake - Cadastro Inteligente
+        <Box sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+                Dados do Item - Verificar e Corrigir
             </Typography>
 
-            <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-                Envie 1-10 fotos dos itens para análise inteligente. A IA identifica automaticamente categoria, marca,
-                tamanho, condição e sugere preços. Inclua o QR do consignante nas fotos e use o áudio para fornecer
-                informações adicionais sobre tecido, defeitos, história do item ou qualquer detalhe relevante.
-            </Typography>
+            <Stack spacing={2}>
+                {/* Campo de Consignante com Autocomplete */}
+                <Autocomplete
+                    fullWidth
+                    size="small"
+                    options={consignors}
+                    getOptionLabel={(option) => `${option.name} (${option.id})`}
+                    value={selectedConsignorObj}
+                    onChange={(_, newValue) => {
+                        setSelectedConsignorObj(newValue);
+                        setSelectedConsignor(newValue?.id || '');
+                    }}
+                    loading={consignorLoading}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            label="Consignante"
+                            placeholder="Busque por nome ou ID"
+                            helperText="Obrigatório para gerar etiqueta com QR code"
+                            InputProps={{
+                                ...params.InputProps,
+                                endAdornment: (
+                                    <>
+                                        {consignorLoading ? <CircularProgress size={20} /> : null}
+                                        {params.InputProps.endAdornment}
+                                    </>
+                                ),
+                            }}
+                        />
+                    )}
+                />
 
-            <Box sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', md: aiResponse ? 'column' : 'row' },
-                gap: 3,
-                transition: 'all 0.3s ease-in-out'
-            }}>
-                {/* Upload Area */}
-                <Box sx={{
-                    flex: 1,
-                    display: aiResponse ? 'none' : 'block',
-                    transition: 'all 0.3s ease-in-out'
-                }}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                <PhotoCamera sx={{ mr: 1 }} />
-                                Upload de Fotos
-                            </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Categoria</InputLabel>
+                        <Select
+                            value={editableData.categoria}
+                            label="Categoria"
+                            onChange={(e) => handleEditChange('categoria', e.target.value)}
+                        >
+                            {categorias.map(cat => (
+                                <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
 
-                            <Paper
-                                {...getRootProps()}
-                                sx={{
-                                    p: 3,
-                                    textAlign: 'center',
-                                    border: '2px dashed',
-                                    borderColor: isDragActive ? 'primary.main' : 'grey.300',
-                                    bgcolor: isDragActive ? 'primary.50' : 'background.paper',
-                                    cursor: 'pointer',
-                                    mb: 2,
-                                }}
-                            >
-                                <input {...getInputProps()} />
-                                <Upload sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                                <Typography variant="h6" gutterBottom>
-                                    {isDragActive ? 'Solte as fotos aqui' : 'Arraste fotos ou clique para selecionar'}
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary">
-                                    Máximo 10 fotos (JPEG, PNG, WebP)
-                                </Typography>
-                            </Paper>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Subcategoria"
+                        value={editableData.subcategoria}
+                        onChange={(e) => handleEditChange('subcategoria', e.target.value)}
+                    />
+                </Stack>
 
-                            {/* Image Previews */}
-                            {previews.length > 0 && (
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        Fotos Selecionadas ({previews.length}/10):
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                        {previews.map((preview, index) => (
-                                            <Box key={index} sx={{ width: 80, height: 80 }}>
-                                                <img
-                                                    src={preview}
-                                                    alt={`Preview ${index + 1}`}
-                                                    style={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'cover',
-                                                        borderRadius: '4px',
-                                                    }}
-                                                />
-                                            </Box>
-                                        ))}
-                                    </Box>
-                                </Box>
-                            )}
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Marca"
+                        value={editableData.marca}
+                        onChange={(e) => handleEditChange('marca', e.target.value)}
+                    />
 
-                            {/* Audio Recording Section */}
-                            <Box sx={{ mt: 3 }}>
-                                <Typography variant="subtitle2" gutterBottom>
-                                    Gravação de Áudio (Opcional)
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Grave informações adicionais: tecido, defeitos, história do item, detalhes sobre
-                                    o consignante, ou qualquer informação que possa ajudar na análise inteligente.
-                                </Typography>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Gênero</InputLabel>
+                        <Select
+                            value={editableData.genero}
+                            label="Gênero"
+                            onChange={(e) => handleEditChange('genero', e.target.value)}
+                        >
+                            {generos.map(gen => (
+                                <MenuItem key={gen} value={gen}>{gen}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Stack>
 
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                    {!audioBlob ? (
-                                        <Button
-                                            variant={isRecording ? "contained" : "outlined"}
-                                            color={isRecording ? "secondary" : "primary"}
-                                            startIcon={isRecording ? <Stop /> : <Mic />}
-                                            onClick={isRecording ? stopRecording : startRecording}
-                                        >
-                                            {isRecording ? 'Parar Gravação' : 'Gravar Áudio'}
-                                        </Button>
-                                    ) : (
-                                        <>
-                                            <Button
-                                                variant="outlined"
-                                                startIcon={isPlaying ? <Pause /> : <PlayArrow />}
-                                                onClick={togglePlayback}
-                                            >
-                                                {isPlaying ? 'Pausar' : 'Reproduzir'}
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                color="error"
-                                                startIcon={<Delete />}
-                                                onClick={clearAudio}
-                                            >
-                                                Excluir
-                                            </Button>
-                                            <Typography variant="body2" color="textSecondary">
-                                                ✓ Áudio gravado
-                                            </Typography>
-                                        </>
-                                    )}
-                                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Tamanho</InputLabel>
+                        <Select
+                            value={editableData.tamanho}
+                            label="Tamanho"
+                            onChange={(e) => handleEditChange('tamanho', e.target.value)}
+                        >
+                            {tamanhos.map(tam => (
+                                <MenuItem key={tam} value={tam}>{tam}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
 
-                                {/* Hidden audio element for playback */}
-                                {audioURL && (
-                                    <audio
-                                        ref={audioRef}
-                                        src={audioURL}
-                                        onEnded={handleAudioEnded}
-                                        style={{ display: 'none' }}
-                                    />
-                                )}
-                            </Box>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Cor"
+                        value={editableData.cor}
+                        onChange={(e) => handleEditChange('cor', e.target.value)}
+                    />
 
-                            <Button
-                                fullWidth
-                                variant="contained"
-                                size="large"
-                                onClick={handleAIAnalysis}
-                                disabled={selectedFiles.length < 1 || loading || isRecording}
-                                sx={{ mt: 2 }}
-                                startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
-                            >
-                                {isRecording ? 'Gravação em andamento...' :
-                                    loading ? 'Analisando com IA...' : 'Analisar com IA'}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </Box>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Condição</InputLabel>
+                        <Select
+                            value={editableData.condicao}
+                            label="Condição"
+                            onChange={(e) => handleEditChange('condicao', e.target.value)}
+                        >
+                            {condicoes.map(cond => (
+                                <MenuItem key={cond} value={cond}>{cond}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Stack>
 
-                {/* AI Results */}
-                {/* Results Area */}
-                <Box sx={{
-                    flex: aiResponse ? 1 : 1,
-                    width: aiResponse ? '100%' : 'auto',
-                    transition: 'all 0.3s ease-in-out'
-                }}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <AutoAwesome color="primary" />
-                                Cadastro Inteligente
-                                {aiResponse && (
-                                    <Chip
-                                        label="IA Ativa"
-                                        size="small"
-                                        color="success"
-                                        variant="outlined"
-                                    />
-                                )}
-                            </Typography>
+                <TextField
+                    fullWidth
+                    size="small"
+                    label="Tecido"
+                    value={editableData.tecido}
+                    onChange={(e) => handleEditChange('tecido', e.target.value)}
+                />
 
-                            {error && (
-                                <Alert severity="error" sx={{ mb: 2 }}>
-                                    {error}
-                                </Alert>
-                            )}
+                <TextField
+                    fullWidth
+                    size="small"
+                    label="Defeitos"
+                    value={editableData.defeitos}
+                    onChange={(e) => handleEditChange('defeitos', e.target.value)}
+                />
 
-                            {aiResponse && (
-                                <Box>
-                                    {/* AI Suggestions */}
-                                    <Typography variant="subtitle1" gutterBottom>
-                                        Sugestões da IA:
-                                    </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Preço Mínimo (R$)"
+                        type="number"
+                        value={editableData.precoMin}
+                        onChange={(e) => handleEditChange('precoMin', e.target.value)}
+                    />
 
-                                    <Box sx={{ mb: 2 }}>
-                                        <Typography variant="body2" color="textSecondary">
-                                            SKU: <strong>{aiResponse.proposal.sku}</strong>
-                                        </Typography>
-                                    </Box>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Preço Máximo (R$)"
+                        type="number"
+                        value={editableData.precoMax}
+                        onChange={(e) => handleEditChange('precoMax', e.target.value)}
+                    />
+                </Stack>
 
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                                        {aiResponse.proposal.cadastro.Categoria && (
-                                            <Chip label={aiResponse.proposal.cadastro.Categoria} color="primary" size="small" />
-                                        )}
-                                        {aiResponse.proposal.cadastro.Marca && (
-                                            <Chip label={aiResponse.proposal.cadastro.Marca} variant="outlined" size="small" />
-                                        )}
-                                        {aiResponse.proposal.cadastro.Tamanho && (
-                                            <Chip label={`Tam: ${aiResponse.proposal.cadastro.Tamanho}`} size="small" />
-                                        )}
-                                        {aiResponse.proposal.cadastro.Cor && (
-                                            <Chip label={aiResponse.proposal.cadastro.Cor} size="small" />
-                                        )}
-                                        {aiResponse.proposal.cadastro.Condição &&
-                                            renderConditionChip(aiResponse.proposal.cadastro.Condição)
-                                        }
-                                    </Box>
+                <TextField
+                    fullWidth
+                    multiline
+                    rows={2}
+                    size="small"
+                    label="Descrição Completa"
+                    value={editableData.descricaoCompleta}
+                    onChange={(e) => handleEditChange('descricaoCompleta', e.target.value)}
+                />
 
-                                    {/* Price Suggestion */}
-                                    {aiResponse.proposal.price.Faixa && (
-                                        <Alert severity="info" sx={{ mb: 2 }}>
-                                            <Typography variant="subtitle2">
-                                                Preço Sugerido: {aiResponse.proposal.price.Faixa}
-                                            </Typography>
-                                            {aiResponse.proposal.price.Motivo && (
-                                                <Typography variant="body2">
-                                                    {aiResponse.proposal.price.Motivo}
-                                                </Typography>
-                                            )}
-                                        </Alert>
-                                    )}
+                <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    size="small"
+                    label="Relatório Detalhado"
+                    value={editableData.relatorioDetalhado}
+                    onChange={(e) => handleEditChange('relatorioDetalhado', e.target.value)}
+                />
+            </Stack>
 
-                                    {/* Similar Items */}
-                                    {aiResponse.similar_items.length > 0 && (
-                                        <Box sx={{ mb: 2 }}>
-                                            <Typography variant="subtitle2" gutterBottom>
-                                                Itens Similares Encontrados:
-                                            </Typography>
-                                            {aiResponse.similar_items.slice(0, 3).map((item, index) => (
-                                                <Typography key={index} variant="body2" color="textSecondary">
-                                                    • {item.id} (similaridade: {(1 - item.distance).toFixed(2)})
-                                                </Typography>
-                                            ))}
-                                        </Box>
-                                    )}
-
-                                    {/* Formulário de edição dos dados */}
-                                    {renderEditableFields()}
-
-                                    {/* Seção do Consignante quando não está editando */}
-                                    {!isEditing && (
-                                        <Box sx={{ mt: 2, mb: 2 }}>
-                                            <Typography variant="h6" gutterBottom>
-                                                Consignante
-                                            </Typography>
-                                            {selectedConsignorObj ? (
-                                                <Alert severity="success" sx={{ mb: 2 }}>
-                                                    <Typography variant="body1">
-                                                        <strong>{selectedConsignorObj.name}</strong> (ID: {selectedConsignorObj.id})
-                                                    </Typography>
-                                                </Alert>
-                                            ) : (
-                                                <Box sx={{ mb: 2 }}>
-                                                    <Autocomplete
-                                                        fullWidth
-                                                        size="small"
-                                                        options={consignors}
-                                                        getOptionLabel={(option) => `${option.name} (${option.id})`}
-                                                        value={selectedConsignorObj}
-                                                        onChange={(_, newValue) => {
-                                                            setSelectedConsignorObj(newValue);
-                                                            setSelectedConsignor(newValue?.id || '');
-                                                        }}
-                                                        loading={consignorLoading}
-                                                        renderInput={(params) => (
-                                                            <TextField
-                                                                {...params}
-                                                                label="Selecione o Consignante"
-                                                                placeholder="Busque por nome ou ID"
-                                                                helperText="Obrigatório para cadastrar o item"
-                                                                InputProps={{
-                                                                    ...params.InputProps,
-                                                                    endAdornment: (
-                                                                        <>
-                                                                            {consignorLoading ? <CircularProgress size={20} /> : null}
-                                                                            {params.InputProps.endAdornment}
-                                                                        </>
-                                                                    ),
-                                                                }}
-                                                            />
-                                                        )}
-                                                    />
-                                                </Box>
-                                            )}
-                                        </Box>
-                                    )}
-
-                                    {/* Dynamic Fields Section */}
-                                    {dynamicFields.length > 0 && (
-                                        <Box sx={{ mt: 3 }}>
-                                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <AutoAwesome color="secondary" />
-                                                Campos Inteligentes
-                                                <Chip
-                                                    label={`${dynamicFields.length} campos`}
-                                                    size="small"
-                                                    color="secondary"
-                                                    variant="outlined"
-                                                />
-                                            </Typography>
-                                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                                Campos adicionais gerados com base na categoria e análise do item
-                                            </Typography>
-
-                                            <Box sx={{
-                                                display: 'grid',
-                                                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                                                gap: 2
-                                            }}>
-                                                {dynamicFields.map((field, index) => renderDynamicField(field, index))}
-                                            </Box>
-                                        </Box>
-                                    )}
-
-                                    <Button
-                                        fullWidth
-                                        variant="contained"
-                                        color="success"
-                                        size="large"
-                                        onClick={handleConfirmIntake}
-                                        sx={{ mt: 2 }}
-                                        disabled={!selectedConsignor}
-                                    >
-                                        Confirmar e Cadastrar Item
-                                    </Button>
-                                </Box>
-                            )}
-                        </CardContent>
-                    </Card>
-                </Box>
+            <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                <Button
+                    variant="contained"
+                    onClick={handleSaveChanges}
+                    size="small"
+                    color="primary"
+                >
+                    Aplicar Alterações
+                </Button>
+                <Button
+                    variant="outlined"
+                    onClick={() => {
+                        // Reset para dados originais da IA
+                        if (aiResponse) {
+                            setEditableData({
+                                categoria: aiResponse.proposal.cadastro.Categoria || '',
+                                subcategoria: aiResponse.proposal.cadastro.Subcategoria || '',
+                                marca: aiResponse.proposal.cadastro.Marca || '',
+                                genero: aiResponse.proposal.cadastro.Gênero || '',
+                                tamanho: aiResponse.proposal.cadastro.Tamanho || '',
+                                modelagem: aiResponse.proposal.cadastro.Modelagem || '',
+                                cor: aiResponse.proposal.cadastro.Cor || '',
+                                tecido: aiResponse.proposal.cadastro.Tecido || '',
+                                condicao: aiResponse.proposal.cadastro.Condição || '',
+                                defeitos: aiResponse.proposal.cadastro.Defeitos || '',
+                                tituloIG: aiResponse.proposal.cadastro.TituloIG || '',
+                                tags: aiResponse.proposal.cadastro.Tags || '',
+                                descricaoCompleta: aiResponse.proposal.descricao_completa || '',
+                                relatorioDetalhado: aiResponse.proposal.relatorio_detalhado || '',
+                                valorEstimado: aiResponse.proposal.valor_estimado || '',
+                                precoMin: aiResponse.proposal.price.Faixa?.split('–')[0]?.replace('R$', '') || '',
+                                precoMax: aiResponse.proposal.price.Faixa?.split('–')[1]?.replace('R$', '') || '',
+                                motivoPreco: aiResponse.proposal.price.Motivo || ''
+                            });
+                        }
+                    }}
+                    size="small"
+                >
+                    Restaurar Original
+                </Button>
             </Box>
         </Box>
     );
+};
+
+// Load dynamic fields when category changes
+const loadDynamicFields = async (category: string, subcategory?: string, brand?: string) => {
+    try {
+        const base64Images = await Promise.all(
+            selectedFiles.map(file => convertToBase64(file))
+        );
+
+        const response = await aiAPI.getDynamicFields(category, subcategory, brand, base64Images);
+        if (response.success) {
+            setDynamicFields(response.fields || []);
+            setDynamicFieldsValues({}); // Reset values
+        }
+    } catch (error) {
+        console.error('Error loading dynamic fields:', error);
+        setDynamicFields([]);
+    }
+};
+
+// Handle dynamic field changes
+const handleDynamicFieldChange = (fieldName: string, value: any) => {
+    setDynamicFieldsValues(prev => ({
+        ...prev,
+        [fieldName]: value
+    }));
+};
+
+// Render dynamic field component
+const renderDynamicField = (field: any, index: number) => {
+    const value = dynamicFieldsValues[field.name] || '';
+
+    switch (field.type) {
+        case 'select':
+            return (
+                <FormControl key={field.name} fullWidth size="small" sx={{ mb: 2 }}>
+                    <InputLabel>{field.label}</InputLabel>
+                    <Select
+                        value={value}
+                        label={field.label}
+                        onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                    >
+                        {field.options?.map((option: string) => (
+                            <MenuItem key={option} value={option}>
+                                {option}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            );
+
+        case 'text':
+            return (
+                <TextField
+                    key={field.name}
+                    fullWidth
+                    size="small"
+                    label={field.label}
+                    placeholder={field.placeholder}
+                    value={value}
+                    onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                    sx={{ mb: 2 }}
+                    required={field.required}
+                />
+            );
+
+        case 'number':
+            return (
+                <TextField
+                    key={field.name}
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label={field.label}
+                    placeholder={field.placeholder}
+                    value={value}
+                    onChange={(e) => handleDynamicFieldChange(field.name, parseFloat(e.target.value) || 0)}
+                    sx={{ mb: 2 }}
+                    required={field.required}
+                />
+            );
+
+        default:
+            return null;
+    }
+};
+
+// Load dynamic fields when AI response changes
+useEffect(() => {
+    if (aiResponse?.proposal?.cadastro?.Categoria) {
+        loadDynamicFields(
+            aiResponse.proposal.cadastro.Categoria,
+            aiResponse.proposal.cadastro.Subcategoria,
+            aiResponse.proposal.cadastro.Marca
+        );
+    }
+}, [aiResponse]);
+
+const handleConfirmIntake = async () => {
+    if (!aiResponse) return;
+    if (!selectedConsignor) {
+        setError('ID do consignante é obrigatório para cadastrar o item');
+        return;
+    }
+
+    try {
+        const base64Images = await Promise.all(
+            selectedFiles.map(file => convertToBase64(file))
+        );
+
+        // Adicionar consignante e campos dinâmicos à proposta
+        const proposalWithConsignor = {
+            ...aiResponse.proposal,
+            consignor_id: selectedConsignor,
+            cadastro: {
+                ...aiResponse.proposal.cadastro,
+                ConsignanteId: selectedConsignor,
+                ...dynamicFieldsValues  // Add dynamic fields values
+            },
+            dynamic_fields: dynamicFieldsValues  // Also store separately for reference
+        };
+
+        await aiAPI.confirmIntake(
+            aiResponse.proposal.sku,
+            proposalWithConsignor,
+            base64Images
+        );
+
+        // Reset form
+        setSelectedFiles([]);
+        setPreviews([]);
+        setAiResponse(null);
+        setEditableData(null);
+        setIsEditing(false);
+        setSelectedConsignor('');
+        setSelectedConsignorObj(null);
+
+        // Reset audio
+        clearAudio();
+
+        alert('Item cadastrado com sucesso! Etiqueta com QR code pode ser impressa.');
+    } catch (err) {
+        setError('Erro ao confirmar cadastro');
+        console.error('Erro detalhado:', err);
+    }
+};
+
+const renderConditionChip = (condition: string) => {
+    const colors: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+        'A': 'success',
+        'A-': 'warning',
+        'B': 'warning',
+        'C': 'error',
+    };
+    return (
+        <Chip
+            label={`Condição: ${condition}`}
+            color={colors[condition] || 'default'}
+            size="small"
+        />
+    );
+};
+
+return (
+    <Box sx={{ p: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AutoAwesome color="primary" />
+            AI Intake - Cadastro Inteligente
+        </Typography>
+
+        <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
+            Envie 1-10 fotos dos itens para análise inteligente. A IA identifica automaticamente categoria, marca,
+            tamanho, condição e sugere preços. Inclua o QR do consignante nas fotos e use o áudio para fornecer
+            informações adicionais sobre tecido, defeitos, história do item ou qualquer detalhe relevante.
+        </Typography>
+
+        <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: aiResponse ? 'column' : 'row' },
+            gap: 3,
+            transition: 'all 0.3s ease-in-out'
+        }}>
+            {/* Upload Area */}
+            <Box sx={{
+                flex: 1,
+                display: aiResponse ? 'none' : 'block',
+                transition: 'all 0.3s ease-in-out'
+            }}>
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                            <PhotoCamera sx={{ mr: 1 }} />
+                            Upload de Fotos
+                        </Typography>
+
+                        <Paper
+                            {...getRootProps()}
+                            sx={{
+                                p: 3,
+                                textAlign: 'center',
+                                border: '2px dashed',
+                                borderColor: isDragActive ? 'primary.main' : 'grey.300',
+                                bgcolor: isDragActive ? 'primary.50' : 'background.paper',
+                                cursor: 'pointer',
+                                mb: 2,
+                            }}
+                        >
+                            <input {...getInputProps()} />
+                            <Upload sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                            <Typography variant="h6" gutterBottom>
+                                {isDragActive ? 'Solte as fotos aqui' : 'Arraste fotos ou clique para selecionar'}
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Máximo 10 fotos (JPEG, PNG, WebP)
+                            </Typography>
+                        </Paper>
+
+                        {/* Image Previews */}
+                        {previews.length > 0 && (
+                            <Box>
+                                <Typography variant="subtitle2" gutterBottom>
+                                    Fotos Selecionadas ({previews.length}/10):
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {previews.map((preview, index) => (
+                                        <Box key={index} sx={{ width: 80, height: 80 }}>
+                                            <img
+                                                src={preview}
+                                                alt={`Preview ${index + 1}`}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover',
+                                                    borderRadius: '4px',
+                                                }}
+                                            />
+                                        </Box>
+                                    ))}
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* Audio Recording Section */}
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle2" gutterBottom>
+                                Gravação de Áudio (Opcional)
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Grave informações adicionais: tecido, defeitos, história do item, detalhes sobre
+                                o consignante, ou qualquer informação que possa ajudar na análise inteligente.
+                            </Typography>
+
+                            <Stack direction="row" spacing={2} alignItems="center">
+                                {!audioBlob ? (
+                                    <Button
+                                        variant={isRecording ? "contained" : "outlined"}
+                                        color={isRecording ? "secondary" : "primary"}
+                                        startIcon={isRecording ? <Stop /> : <Mic />}
+                                        onClick={isRecording ? stopRecording : startRecording}
+                                    >
+                                        {isRecording ? 'Parar Gravação' : 'Gravar Áudio'}
+                                    </Button>
+                                ) : (
+                                    <>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={isPlaying ? <Pause /> : <PlayArrow />}
+                                            onClick={togglePlayback}
+                                        >
+                                            {isPlaying ? 'Pausar' : 'Reproduzir'}
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            color="error"
+                                            startIcon={<Delete />}
+                                            onClick={clearAudio}
+                                        >
+                                            Excluir
+                                        </Button>
+                                        <Typography variant="body2" color="textSecondary">
+                                            ✓ Áudio gravado
+                                        </Typography>
+                                    </>
+                                )}
+                            </Stack>
+
+                            {/* Hidden audio element for playback */}
+                            {audioURL && (
+                                <audio
+                                    ref={audioRef}
+                                    src={audioURL}
+                                    onEnded={handleAudioEnded}
+                                    style={{ display: 'none' }}
+                                />
+                            )}
+                        </Box>
+
+                        <Button
+                            fullWidth
+                            variant="contained"
+                            size="large"
+                            onClick={handleAIAnalysis}
+                            disabled={selectedFiles.length < 1 || loading || isRecording}
+                            sx={{ mt: 2 }}
+                            startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+                        >
+                            {isRecording ? 'Gravação em andamento...' :
+                                loading ? 'Analisando com IA...' : 'Analisar com IA'}
+                        </Button>
+                    </CardContent>
+                </Card>
+            </Box>
+
+            {/* AI Results */}
+            {/* Results Area */}
+            <Box sx={{
+                flex: aiResponse ? 1 : 1,
+                width: aiResponse ? '100%' : 'auto',
+                transition: 'all 0.3s ease-in-out'
+            }}>
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <AutoAwesome color="primary" />
+                            Cadastro Inteligente
+                            {aiResponse && (
+                                <Chip
+                                    label="IA Ativa"
+                                    size="small"
+                                    color="success"
+                                    variant="outlined"
+                                />
+                            )}
+                        </Typography>
+
+                        {error && (
+                            <Alert severity="error" sx={{ mb: 2 }}>
+                                {error}
+                            </Alert>
+                        )}
+
+                        {aiResponse && (
+                            <Box>
+                                {/* AI Suggestions */}
+                                <Typography variant="subtitle1" gutterBottom>
+                                    Sugestões da IA:
+                                </Typography>
+
+                                <Box sx={{ mb: 2 }}>
+                                    <Typography variant="body2" color="textSecondary">
+                                        SKU: <strong>{aiResponse.proposal.sku}</strong>
+                                    </Typography>
+                                </Box>
+
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                                    {aiResponse.proposal.cadastro.Categoria && (
+                                        <Chip label={aiResponse.proposal.cadastro.Categoria} color="primary" size="small" />
+                                    )}
+                                    {aiResponse.proposal.cadastro.Marca && (
+                                        <Chip label={aiResponse.proposal.cadastro.Marca} variant="outlined" size="small" />
+                                    )}
+                                    {aiResponse.proposal.cadastro.Tamanho && (
+                                        <Chip label={`Tam: ${aiResponse.proposal.cadastro.Tamanho}`} size="small" />
+                                    )}
+                                    {aiResponse.proposal.cadastro.Cor && (
+                                        <Chip label={aiResponse.proposal.cadastro.Cor} size="small" />
+                                    )}
+                                    {aiResponse.proposal.cadastro.Condição &&
+                                        renderConditionChip(aiResponse.proposal.cadastro.Condição)
+                                    }
+                                </Box>
+
+                                {/* Price Suggestion */}
+                                {aiResponse.proposal.price.Faixa && (
+                                    <Alert severity="info" sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2">
+                                            Preço Sugerido: {aiResponse.proposal.price.Faixa}
+                                        </Typography>
+                                        {aiResponse.proposal.price.Motivo && (
+                                            <Typography variant="body2">
+                                                {aiResponse.proposal.price.Motivo}
+                                            </Typography>
+                                        )}
+                                    </Alert>
+                                )}
+
+                                {/* Similar Items */}
+                                {aiResponse.similar_items.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" gutterBottom>
+                                            Itens Similares Encontrados:
+                                        </Typography>
+                                        {aiResponse.similar_items.slice(0, 3).map((item, index) => (
+                                            <Typography key={index} variant="body2" color="textSecondary">
+                                                • {item.id} (similaridade: {(1 - item.distance).toFixed(2)})
+                                            </Typography>
+                                        ))}
+                                    </Box>
+                                )}
+
+                                {/* Formulário de edição dos dados */}
+                                {renderEditableFields()}
+
+                                {/* Seção do Consignante quando não está editando */}
+                                {!isEditing && (
+                                    <Box sx={{ mt: 2, mb: 2 }}>
+                                        <Typography variant="h6" gutterBottom>
+                                            Consignante
+                                        </Typography>
+                                        {selectedConsignorObj ? (
+                                            <Alert severity="success" sx={{ mb: 2 }}>
+                                                <Typography variant="body1">
+                                                    <strong>{selectedConsignorObj.name}</strong> (ID: {selectedConsignorObj.id})
+                                                </Typography>
+                                            </Alert>
+                                        ) : (
+                                            <Box sx={{ mb: 2 }}>
+                                                <Autocomplete
+                                                    fullWidth
+                                                    size="small"
+                                                    options={consignors}
+                                                    getOptionLabel={(option) => `${option.name} (${option.id})`}
+                                                    value={selectedConsignorObj}
+                                                    onChange={(_, newValue) => {
+                                                        setSelectedConsignorObj(newValue);
+                                                        setSelectedConsignor(newValue?.id || '');
+                                                    }}
+                                                    loading={consignorLoading}
+                                                    renderInput={(params) => (
+                                                        <TextField
+                                                            {...params}
+                                                            label="Selecione o Consignante"
+                                                            placeholder="Busque por nome ou ID"
+                                                            helperText="Obrigatório para cadastrar o item"
+                                                            InputProps={{
+                                                                ...params.InputProps,
+                                                                endAdornment: (
+                                                                    <>
+                                                                        {consignorLoading ? <CircularProgress size={20} /> : null}
+                                                                        {params.InputProps.endAdornment}
+                                                                    </>
+                                                                ),
+                                                            }}
+                                                        />
+                                                    )}
+                                                />
+                                            </Box>
+                                        )}
+                                    </Box>
+                                )}
+
+                                {/* Dynamic Fields Section */}
+                                {dynamicFields.length > 0 && (
+                                    <Box sx={{ mt: 3 }}>
+                                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <AutoAwesome color="secondary" />
+                                            Campos Inteligentes
+                                            <Chip
+                                                label={`${dynamicFields.length} campos`}
+                                                size="small"
+                                                color="secondary"
+                                                variant="outlined"
+                                            />
+                                        </Typography>
+                                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                            Campos adicionais gerados com base na categoria e análise do item
+                                        </Typography>
+
+                                        <Box sx={{
+                                            display: 'grid',
+                                            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                                            gap: 2
+                                        }}>
+                                            {dynamicFields.map((field, index) => renderDynamicField(field, index))}
+                                        </Box>
+                                    </Box>
+                                )}
+
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    color="success"
+                                    size="large"
+                                    onClick={handleConfirmIntake}
+                                    sx={{ mt: 2 }}
+                                    disabled={!selectedConsignor}
+                                >
+                                    Confirmar e Cadastrar Item
+                                </Button>
+                            </Box>
+                        )}
+                    </CardContent>
+                </Card>
+            </Box>
+        </Box>
+    </Box>
+);
 };
 
 export default AIIntake;

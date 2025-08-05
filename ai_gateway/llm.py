@@ -5,18 +5,15 @@ from config import OLLAMA_URL, GEMMA_MODEL
 from speech import transcribe_audio, is_whisper_available
 
 SYS_INTAKE = (
-    "Você é um especialista em catalogar QUALQUER TIPO DE ITEM para brechó "
-    "brasileiro. Analise cuidadosamente as fotos fornecidas e identifique "
-    "EXATAMENTE o que é o item. PRIMEIRO identifique se é: roupa, eletrônico, "
-    "decoração, iluminação, móvel, acessório, etc. Depois analise as "
-    "características específicas do item identificado. NUNCA confunda "
-    "categorias - se é uma luminária, NÃO é roupa! "
-    "Retorne JSON ESTRITO com chaves: "
-    '{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem","Cor",'
-    '"Tecido","Condição","Defeitos","TituloIG","Tags","DescricaoCompleta"}. '
-    "DescricaoCompleta deve ter 2-3 frases descrevendo detalhadamente o item, "
-    "suas características, funcionalidades e estado. "
-    "Condição deve ser: A, A-, B ou C. Use português brasileiro. "
+    "Você é um especialista em catalogação inteligente para brechó brasileiro. "
+    "Analise as fotos e identifique EXATAMENTE o item. Seja DINÂMICO e INTELIGENTE: "
+    "escolha apenas os campos RELEVANTES para este tipo específico de item. "
+    "Para uma luminária: tipo_luz, potencia, voltagem, material, estilo. "
+    "Para roupa: tecido, tamanho, genero, modelagem, estacao. "
+    "Para eletrônico: marca, modelo, funcionalidade, estado, conectividade. "
+    "Para decoração: material, estilo, dimensoes, epoca, funcao. "
+    "NUNCA force campos irrelevantes! Retorne JSON com apenas campos úteis. "
+    "Use português brasileiro e seja preciso na identificação."
 )
 
 SYS_PRICE = (
@@ -121,42 +118,35 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         print("Nenhum áudio fornecido")
     
     prompt = (
-        "Analise CUIDADOSAMENTE as imagens fornecidas e identifique EXATAMENTE que tipo de item é. "
-        "PRIMEIRO determine se é: roupa, eletrônico, decoração, iluminação, móvel, acessório, etc. "
-        "DEPOIS analise as características específicas do item identificado. "
-        
-        "Examine e descreva: "
-        "- Que tipo exato de item é (categoria específica) "
-        "- Material principal que aparenta ser "
-        "- Cor e características visuais "
-        "- Condição atual do item "
-        "- Estilo e formato "
-        "- Qualquer detalhe relevante que conseguir observar "
-        
+        "Analise as imagens e identifique o item. Seja INTELIGENTE na escolha dos campos! "
         f"{audio_description}"
         
-        "IMPORTANTE: Seja CONSISTENTE em todas as descrições. Use o mesmo contexto e características "
-        "para todas as seções (DescricaoCompleta, RelatorioDetalhado, etc.). "
+        "INSTRUÇÕES DINÂMICAS: "
+        "1. Identifique PRIMEIRO o tipo de item (roupa, eletrônico, decoração, iluminação, etc.) "
+        "2. Escolha APENAS os campos RELEVANTES para esse tipo específico "
+        "3. Use nomes de campos em português, descritivos e úteis "
         
-        "Retorne JSON com: "
-        '{"Categoria","Subcategoria","Marca","Gênero","Tamanho","Modelagem",'
-        '"Cor","Tecido","Condição","Defeitos","TituloIG","Tags",'
-        '"DescricaoCompleta","RelatorioDetalhado","ValorEstimado"}. '
+        "EXEMPLOS de campos inteligentes por categoria: "
+        "• ROUPA: categoria, subcategoria, tamanho, genero, tecido, cor, estacao, modelagem, marca, condicao "
+        "• LUMINÁRIA: categoria, tipo_luminaria, fonte_luz, potencia, voltagem, material, cor, estilo, marca, condicao "
+        "• ELETRÔNICO: categoria, tipo_eletronico, marca, modelo, funcionalidade, conectividade, voltagem, cor, condicao "
+        "• DECORAÇÃO: categoria, tipo_decoracao, material, estilo, dimensoes, cor, epoca, funcao, marca, condicao "
         
-        "DescricaoCompleta: 2-3 frases sobre o item, suas características e uso. "
-        "RelatorioDetalhado: análise técnica completa do item observado. "
-        "ValorEstimado: faixa de preço estimada baseada no tipo e condição."
+        "CAMPOS SEMPRE INCLUIR: categoria, cor, condicao (A/A-/B/C), descricao_completa "
+        "NUNCA inclua campos irrelevantes! Para luminária NÃO coloque 'tecido' ou 'genero'! "
+        
+        "Retorne JSON com campos inteligentes e relevantes apenas."
     )
     
     system = (
-        "Você é um especialista em análise de QUALQUER tipo de item para brechó. "
-        "Analise apenas o que consegue ver claramente nas fotos, sem assumir informações. "
-        "NUNCA confunda categorias - se é uma luminária, NÃO é roupa! "
-        "Seja preciso na identificação de materiais, tipos e condição. "
-        "Condição: A=perfeita, A-=ótima, B=boa com sinais leves, C=visível desgaste. "
-        "Para itens que não são roupas: Gênero='Unissex', Tamanho=dimensões/tamanho do objeto, "
-        "Tecido=material principal, Modelagem=formato/estilo. "
-        "Mantenha CONSISTÊNCIA em todas as descrições do mesmo item."
+        "Você é um especialista em análise inteligente de itens para brechó. "
+        "REGRAS FUNDAMENTAIS: "
+        "1. Identifique corretamente o tipo de item - NUNCA confunda categorias! "
+        "2. Use apenas campos RELEVANTES para o tipo identificado "
+        "3. Seja preciso e baseado apenas no que vê nas fotos "
+        "4. Condição: A=perfeito, A-=ótimo, B=bom com sinais, C=desgaste visível "
+        "5. Descrição completa: 2-3 frases sobre o item e suas características "
+        "SEJA DINÂMICO E INTELIGENTE NA ESCOLHA DOS CAMPOS!"
     )
     
     response = ollama_multimodal_analyze(images, prompt, system, audio_base64)
