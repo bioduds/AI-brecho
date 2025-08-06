@@ -132,8 +132,18 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         "• ELETRÔNICO: categoria, tipo_eletronico, marca, modelo, funcionalidade, conectividade, voltagem, cor, condicao "
         "• DECORAÇÃO: categoria, tipo_decoracao, material, estilo, dimensoes, cor, epoca, funcao, marca, condicao "
         
-        "CAMPOS SEMPRE INCLUIR: categoria, cor, condicao (A/A-/B/C), descricao_completa "
+        "CAMPOS OBRIGATÓRIOS que SEMPRE devem estar presentes: "
+        "- categoria: tipo principal do item "
+        "- cor: cor predominante "
+        "- condicao: A, A-, B ou C baseado no estado visual "
+        "- descricao_completa: 2-3 frases descrevendo detalhadamente "
+        "- preco_minimo: valor numérico inteiro (sem R$) "
+        "- preco_maximo: valor numérico inteiro (sem R$) "
+        "- preco_sugerido: valor numérico inteiro recomendado para venda (sem R$) "
+        "- motivo_preco: justificativa da precificação baseada no tipo, estado e marca "
+        
         "NUNCA inclua campos irrelevantes! Para luminária NÃO coloque 'tecido' ou 'genero'! "
+        "NUNCA invente marcas - use 'Não identificada' se não conseguir ler. "
         
         "Retorne JSON com campos inteligentes e relevantes apenas."
     )
