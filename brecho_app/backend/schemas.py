@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
+import json
 
 
 # Base schemas
@@ -32,7 +33,7 @@ class Consignor(ConsignorBase):
     id: str
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -61,7 +62,7 @@ class ItemBase(BaseModel):
     list_price: Optional[float] = None
     markdown_stage: int = 0
     channel_listed: Optional[str] = None
-    photos: Optional[str] = None
+    photos: Optional[List[str]] = None
     notes: Optional[str] = None
     active: bool = True
 
@@ -92,7 +93,7 @@ class ItemUpdate(BaseModel):
     list_price: Optional[float] = None
     markdown_stage: Optional[int] = None
     channel_listed: Optional[str] = None
-    photos: Optional[str] = None
+    photos: Optional[List[str]] = None
     notes: Optional[str] = None
     active: Optional[bool] = None
 
@@ -109,7 +110,27 @@ class Item(ItemBase):
     ai_similar_items: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+
+    @validator("photos", pre=True)
+    def parse_photos(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                # Se for uma string JSON, converter para lista
+                if v.startswith("[") and v.endswith("]"):
+                    return json.loads(v)
+                # Se for uma string com vírgulas, dividir
+                elif "," in v:
+                    return [photo.strip() for photo in v.split(",") if photo.strip()]
+                # Se for uma string única
+                else:
+                    return [v] if v else None
+            except (json.JSONDecodeError, AttributeError):
+                # Se falhar, tentar dividir por vírgula
+                return [photo.strip() for photo in str(v).split(",") if photo.strip()]
+        return v
+
     class Config:
         from_attributes = True
 
@@ -135,7 +156,7 @@ class SaleCreate(SaleBase):
 class Sale(SaleBase):
     id: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

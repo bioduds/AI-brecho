@@ -21,7 +21,6 @@ import {
     Stack,
     Alert,
     CircularProgress,
-    Autocomplete,
     Paper,
     IconButton,
     Tooltip,
@@ -29,8 +28,17 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    Grid,
     Divider,
+    Badge,
+    Avatar,
+    Skeleton,
+    Fab,
+    InputAdornment,
+    Menu,
+    ListItemIcon,
+    ListItemText,
+    Switch,
+    FormControlLabel,
 } from '@mui/material';
 import {
     Inventory,
@@ -38,998 +46,1486 @@ import {
     FilterList,
     Visibility,
     Edit,
-    ShoppingCart,
-    CheckCircle,
     Close,
+    Add,
+    PhotoLibrary,
+    ViewColumn,
+    Refresh,
+    MoreVert,
+    Delete,
+    Download,
+    Upload,
+    Settings,
+    TrendingUp,
+    AttachMoney,
+    ShoppingCart,
+    LocalOffer,
+    Category,
+    Star,
+    StarBorder,
+    GridView,
+    TableRows,
 } from '@mui/icons-material';
-import { itemAPI, consignorAPI, Item, Consignor } from '../services/api';
+import api from '../services/api';
 
-const Items: React.FC = () => {
+// Placeholder image for items without photos
+const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/200x200?text=Sem+Foto';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+// Interfaces simplificadas
+interface Item {
+    id: number;
+    sku: string;
+    name: string;
+    title_ig?: string;
+    brand?: string;
+    category?: string;
+    subcategory?: string;
+    condition: string;
+    size?: string;
+    color?: string;
+    fabric?: string;
+    gender?: string;
+    fit?: string;
+    acquisition_type?: string;
+    consignor_id?: string;
+    list_price?: number;
+    cost?: number;
+    price: number; // Mantém para compatibilidade
+    status: string;
+    location?: string;
+    description?: string;
+    photos?: string[] | string;
+    flaws?: string;
+    bust?: number;
+    waist?: number;
+    length?: number;
+    active?: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+const ItemsPage: React.FC = () => {
+    // Estados básicos
     const [items, setItems] = useState<Item[]>([]);
-    const [consignors, setConsignors] = useState<Consignor[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    // Pagination
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
-    const [totalItems, setTotalItems] = useState(0);
 
-    // Filters
+    // Estados de busca e filtros
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [selectedConsignor, setSelectedConsignor] = useState<string>('');
-    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [conditionFilter, setConditionFilter] = useState('');
 
-    // Modal states
-    const [viewModalOpen, setViewModalOpen] = useState(false);
-    const [editModalOpen, setEditModalOpen] = useState(false);
+    // Estados de visualização
+    const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-    const [editableItem, setEditableItem] = useState<Item | null>(null);
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [imageViewerOpen, setImageViewerOpen] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-    const categories = ['Blusa', 'Vestido', 'Calça', 'Saia', 'Casaco', 'Moletom', 'Tricot', 'Camisa', 'Outros'];
+    // Menu de ações
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-    const statusOptions = [
-        { value: 'all', label: 'Todos' },
-        { value: 'available', label: 'Disponível' },
-        { value: 'sold', label: 'Vendido' },
-        { value: 'pending', label: 'Pendente' },
-    ];
-
-    // Load data
-    const loadItems = async () => {
+    // Carregar itens
+    const fetchItems = async () => {
         setLoading(true);
+        setError(null);
         try {
-            const params: any = {
-                skip: page * rowsPerPage,
-                limit: rowsPerPage,
-            };
+            const response = await api.get('/items');
+            // Normalize the data to ensure prices are numbers
+            const normalizedItems = response.data.map((item: any) => ({
+                ...item,
+                price: typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price || 0)
+            }));
 
-            if (selectedCategory) params.category = selectedCategory;
-            if (selectedConsignor) params.consignor_id = selectedConsignor;
-            if (statusFilter !== 'all') {
-                if (statusFilter === 'sold') params.active = false;
-                else if (statusFilter === 'available') params.active = true;
+            // Debug: log first few items to check data structure
+            console.log('Items loaded:', normalizedItems.length);
+            if (normalizedItems.length > 0) {
+                console.log('Sample item:', normalizedItems[0]);
             }
 
-            const data = await itemAPI.getAll(params);
-            setItems(data);
-            setTotalItems(data.length); // In a real app, this would come from API
-        } catch (err) {
-            setError('Erro ao carregar itens');
-            console.error(err);
+            setItems(normalizedItems);
+        } catch (error) {
+            console.error('Erro ao carregar itens:', error);
+            setError('Erro ao carregar itens. Tente novamente.');
         } finally {
             setLoading(false);
         }
     };
 
-    const loadConsignors = async () => {
-        try {
-            const data = await consignorAPI.getAll();
-            setConsignors(data);
-        } catch (err) {
-            console.error('Error loading consignors:', err);
-        }
-    };
-
     useEffect(() => {
-        loadConsignors();
+        fetchItems();
     }, []);
 
-    useEffect(() => {
-        loadItems();
-    }, [page, rowsPerPage, selectedCategory, selectedConsignor, statusFilter]);
-
-    // Filter items by search term (client-side)
-    const filteredItems = items.filter(item =>
-        !searchTerm ||
-        item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.title_ig?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const handleChangePage = (event: unknown, newPage: number) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    const getStatusChip = (item: Item) => {
-        if (item.sold_at) {
-            return <Chip label="Vendido" color="success" size="small" />;
+    // Helper function to normalize photos
+    const normalizePhotos = (photos?: string[] | string): string[] => {
+        if (!photos) {
+            return [];
         }
-        if (item.listed_at) {
-            return <Chip label="Disponível" color="primary" size="small" />;
+        if (typeof photos === 'string') {
+            // Handle string photos - could be comma-separated or single URL
+            try {
+                // Try to parse as JSON first
+                const parsed = JSON.parse(photos);
+                return Array.isArray(parsed) ? parsed : [photos];
+            } catch {
+                // If not JSON, treat as comma-separated or single URL
+                return photos.includes(',') ? photos.split(',').map(p => p.trim()) : [photos];
+            }
         }
-        return <Chip label="Pendente" color="warning" size="small" />;
+        return Array.isArray(photos) ? photos : [];
     };
 
-    const getConditionChip = (condition?: string) => {
-        if (!condition) return null;
-
-        const colors: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-            'A': 'success',
-            'A-': 'warning',
-            'B': 'warning',
-            'C': 'error',
-        };
-
-        return (
-            <Chip
-                label={condition}
-                color={colors[condition] || 'default'}
-                size="small"
-                variant="outlined"
-            />
-        );
+    // Helper function to get full image URL
+    const getImageUrl = (photoPath: string): string => {
+        if (!photoPath) {
+            return DEFAULT_PLACEHOLDER;
+        }
+        if (photoPath.startsWith('http')) {
+            return photoPath;
+        }
+        // Remove leading slash if present and add base URL
+        const cleanPath = photoPath.startsWith('/') ? photoPath.substring(1) : photoPath;
+        return `${API_BASE_URL}/${cleanPath}`;
     };
 
-    const formatPrice = (price?: number) => {
-        if (!price) return '-';
-        return new Intl.NumberFormat('pt-BR', {
-            style: 'currency',
-            currency: 'BRL',
-        }).format(price);
+    // Helper function to get normalized photos with full URLs
+    const getNormalizedPhotosWithUrls = (photos?: string[] | string): string[] => {
+        const normalizedPhotos = normalizePhotos(photos);
+        return normalizedPhotos.map(photo => getImageUrl(photo));
     };
 
-    const formatDate = (dateString?: string) => {
-        if (!dateString) return '-';
-        return new Date(dateString).toLocaleDateString('pt-BR');
+    // Helper function to get item display title
+    const getItemTitle = (item: Item): string => {
+        return item.title_ig || item.name || `Item ${item.sku}` || 'Sem título';
     };
 
-    const getConsignorName = (consignorId?: string) => {
-        if (!consignorId) return '-';
-        const consignor = consignors.find(c => c.id === consignorId);
-        return consignor?.name || consignorId;
+    // Helper function to get item price
+    const getItemPrice = (item: Item): number => {
+        return item.list_price || item.price || 0;
     };
 
-    const getFirstPhoto = (photos?: string) => {
-        if (!photos) return null;
-        const photoList = photos.split(',');
-        return photoList[0]?.trim() || null;
+    // Helper function to get item status for display
+    const getItemStatus = (item: Item): string => {
+        if (!item.active) {
+            return 'arquivado';
+        }
+        if (item.status) {
+            return item.status;
+        }
+        return 'disponivel';
     };
 
-    const ItemThumbnail: React.FC<{ item: Item }> = ({ item }) => {
-        const firstPhoto = getFirstPhoto(item.photos);
-        const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    // Filtrar itens (excluir arquivados)
+    const filteredItems = items.filter(item => {
+        // Excluir itens arquivados
+        if (item.active === false) {
+            return false;
+        }
 
-        // Build full URL for the image
-        const imageUrl = firstPhoto ?
-            (firstPhoto.startsWith('http') ? firstPhoto : `${API_BASE_URL}${firstPhoto}`)
-            : null;
+        const searchFields = [
+            getItemTitle(item),
+            item.sku,
+            item.title_ig,
+            item.name,
+            item.brand,
+            item.category,
+            item.description
+        ].filter(Boolean).join(' ').toLowerCase();
 
-        return (
-            <Box
-                sx={{
-                    width: 60,
-                    height: 60,
-                    borderRadius: 1,
-                    overflow: 'hidden',
-                    border: '1px solid #e0e0e0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#f5f5f5',
-                    position: 'relative',
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s',
-                    '&:hover': {
-                        transform: 'scale(1.05)',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                    }
-                }}
-            >
-                {imageUrl ? (
-                    <img
-                        src={imageUrl}
-                        alt={`Item ${item.sku}`}
-                        style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                        }}
-                        onError={(e) => {
-                            // Fallback to placeholder on error
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement!;
-                            parent.innerHTML = `
-                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #999;">
-                                    <span style="font-size: 10px; font-weight: bold;">SEM</span>
-                                    <span style="font-size: 10px; font-weight: bold;">FOTO</span>
-                                </div>
-                                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; font-size: 8px; padding: 2px 4px; text-align: center;">
-                                    ${item.sku}
-                                </div>
-                            `;
-                        }}
-                    />
-                ) : (
-                    <Box sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: '100%'
-                    }}>
-                        <Typography variant="caption" color="textSecondary" sx={{
-                            fontSize: '10px',
-                            fontWeight: 'bold',
-                            textAlign: 'center',
-                            lineHeight: 1
-                        }}>
-                            SEM<br />FOTO
-                        </Typography>
-                    </Box>
-                )}
-                {/* SKU overlay */}
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        fontSize: '8px',
-                        padding: '2px 4px',
-                        textAlign: 'center',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    {item.sku}
-                </Box>
-            </Box>
-        );
-    };
+        const matchesSearch = !searchTerm || searchFields.includes(searchTerm.toLowerCase());
+        const matchesStatus = !statusFilter || item.status === statusFilter;
+        const matchesCategory = !categoryFilter || item.category === categoryFilter;
+        const matchesCondition = !conditionFilter || item.condition === conditionFilter;
 
-    // Modal functions
+        return matchesSearch && matchesStatus && matchesCategory && matchesCondition;
+    });
+
+    // Handlers
     const handleViewItem = (item: Item) => {
         setSelectedItem(item);
         setViewModalOpen(true);
     };
 
-    const handleEditItem = (item: Item) => {
-        setEditableItem({ ...item });
-        setEditModalOpen(true);
-    };
-
-    const handleCloseModals = () => {
-        setViewModalOpen(false);
-        setEditModalOpen(false);
-        setSelectedItem(null);
-        setEditableItem(null);
-    };
-
-    const handleSaveEdit = async () => {
-        if (!editableItem) return;
-
-        try {
-            // TODO: Implement item update API
-            // await itemAPI.update(editableItem.sku, editableItem);
-
-            // Update the item in the local state
-            setItems(prev => prev.map(item =>
-                item.sku === editableItem.sku ? editableItem : item
-            ));
-
-            handleCloseModals();
-            // You can add a success message here
-        } catch (err) {
-            setError('Erro ao atualizar item');
-            console.error(err);
+    const handleImageClick = (photos: string[], index = 0) => {
+        if (photos && photos.length > 0) {
+            setSelectedItem({ ...selectedItem!, photos });
+            setCurrentImageIndex(index);
+            setImageViewerOpen(true);
         }
     };
 
-    const handleEditChange = (field: keyof Item, value: any) => {
-        if (!editableItem) return;
-        setEditableItem(prev => prev ? { ...prev, [field]: value } : null);
+    const handleEditItem = (item: Item) => {
+        // For now, just show an alert - you can implement full edit functionality later
+        alert(`Editar item: ${getItemTitle(item)} (SKU: ${item.sku})`);
     };
 
+    const handleDeleteItem = (item: Item) => {
+        setSelectedItem(item);
+        setDeleteModalOpen(true);
+    };
+
+    const confirmDeleteItem = async () => {
+        if (!selectedItem) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // Arquivar o item (não deletar) - apenas marcar como inactive
+            await fetch(`${API_BASE_URL}/api/v1/items/${selectedItem.sku}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ active: false })
+            });
+
+            // Remover da lista local
+            setItems(prevItems => prevItems.filter(item => item.sku !== selectedItem.sku));
+            setDeleteModalOpen(false);
+            setSelectedItem(null);
+        } catch (error) {
+            console.error('Erro ao arquivar item:', error);
+            setError('Erro ao arquivar item');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddNewItem = () => {
+        // For now, just show an alert - you can implement full add functionality later
+        alert('Adicionar novo item - funcionalidade em desenvolvimento');
+    };
+
+    // Componente de foto otimizado
+    const PhotoDisplay: React.FC<{
+        photos?: string[];
+        alt: string;
+        size?: number;
+        onClick?: () => void;
+        showBadge?: boolean;
+    }> = ({ photos, alt, size = 48, onClick, showBadge = true }) => {
+        if (!photos || photos.length === 0) {
+            return (
+                <Avatar
+                    sx={{
+                        width: size,
+                        height: size,
+                        bgcolor: 'grey.200',
+                        cursor: onClick ? 'pointer' : 'default'
+                    }}
+                    onClick={onClick}
+                >
+                    <PhotoLibrary sx={{ color: 'grey.500' }} />
+                </Avatar>
+            );
+        }
+
+        const photo = (
+            <Avatar
+                src={photos[0] || DEFAULT_PLACEHOLDER}
+                alt={alt}
+                sx={{
+                    width: size,
+                    height: size,
+                    cursor: onClick ? 'pointer' : 'default',
+                    transition: 'all 0.2s',
+                    '&:hover': onClick ? {
+                        transform: 'scale(1.05)',
+                        boxShadow: 2
+                    } : {}
+                }}
+                onClick={onClick}
+            >
+                <PhotoLibrary />
+            </Avatar>
+        );
+
+        if (showBadge && photos.length > 1) {
+            return (
+                <Badge
+                    badgeContent={photos.length}
+                    color="primary"
+                    anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                >
+                    {photo}
+                </Badge>
+            );
+        }
+
+        return photo;
+    };
+
+    // Componente de status
+    const StatusChip: React.FC<{ status: string }> = ({ status }) => {
+        const getStatusColor = (status: string) => {
+            if (!status) {
+                return 'default';
+            }
+            switch (status.toLowerCase()) {
+                case 'disponivel': return 'success';
+                case 'vendido': return 'error';
+                case 'reservado': return 'warning';
+                default: return 'default';
+            }
+        };
+
+        return (
+            <Chip
+                label={status || 'N/A'}
+                size="small"
+                color={getStatusColor(status) as any}
+                variant="filled"
+            />
+        );
+    };
+
+    // Componente de condição
+    const ConditionChip: React.FC<{ condition: string }> = ({ condition }) => {
+        const getConditionColor = (condition: string) => {
+            if (!condition) {
+                return 'default';
+            }
+            switch (condition.toLowerCase()) {
+                case 'novo': return 'success';
+                case 'seminovo': return 'warning';
+                case 'usado': return 'info';
+                default: return 'default';
+            }
+        };
+
+        return (
+            <Chip
+                label={condition || 'N/A'}
+                size="small"
+                color={getConditionColor(condition) as any}
+                variant="outlined"
+            />
+        );
+    };
+
+    if (loading && items.length === 0) {
+        return (
+            <Box sx={{ p: 3 }}>
+                <Card>
+                    <CardContent>
+                        <Stack spacing={2}>
+                            <Skeleton variant="rectangular" height={60} />
+                            <Skeleton variant="rectangular" height={40} />
+                            {Array.from(new Array(5)).map((_, index) => (
+                                <Stack key={index} direction="row" spacing={2} alignItems="center">
+                                    <Skeleton variant="circular" width={48} height={48} />
+                                    <Stack spacing={1} sx={{ flex: 1 }}>
+                                        <Skeleton variant="text" width="60%" />
+                                        <Skeleton variant="text" width="40%" />
+                                    </Stack>
+                                    <Skeleton variant="text" width={80} />
+                                    <Skeleton variant="text" width={100} />
+                                </Stack>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Box>
+        );
+    }
+
     return (
-        <Box sx={{ p: 2 }}>
-            <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Inventory color="primary" />
-                Gestão de Itens
-            </Typography>
+        <Box sx={{ p: 3, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+            {/* Header moderno */}
+            <Paper
+                elevation={0}
+                sx={{
+                    p: 4,
+                    mb: 3,
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    borderRadius: 2
+                }}
+            >
+                <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
+                    spacing={2}
+                >
+                    <Box>
+                        <Typography variant="h4" fontWeight="bold" gutterBottom>
+                            <Inventory sx={{ mr: 2, fontSize: '1.2em' }} />
+                            Inventário
+                        </Typography>
+                        <Stack direction="row" spacing={3} sx={{ opacity: 0.9 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <TrendingUp fontSize="small" />
+                                <Typography variant="body2">
+                                    {filteredItems.length} itens
+                                </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <AttachMoney fontSize="small" />
+                                <Typography variant="body2">
+                                    R$ {filteredItems.reduce((acc, item) => acc + getItemPrice(item), 0).toFixed(2)}
+                                </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <ShoppingCart fontSize="small" />
+                                <Typography variant="body2">
+                                    {filteredItems.filter(item => getItemStatus(item) === 'disponivel').length} disponíveis
+                                </Typography>
+                            </Box>
+                        </Stack>
+                    </Box>
 
-            <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-                Visualize e gerencie todos os itens cadastrados no sistema.
-            </Typography>
+                    <Stack direction="row" spacing={1}>
+                        <Button
+                            variant="contained"
+                            sx={{
+                                bgcolor: 'rgba(255,255,255,0.2)',
+                                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                            }}
+                            startIcon={<Add />}
+                            onClick={handleAddNewItem}
+                        >
+                            Novo Item
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            sx={{
+                                borderColor: 'rgba(255,255,255,0.5)',
+                                color: 'white',
+                                '&:hover': { borderColor: 'rgba(255,255,255,0.8)' }
+                            }}
+                            startIcon={<Upload />}
+                        >
+                            Importar
+                        </Button>
+                    </Stack>
+                </Stack>
+            </Paper>
 
-            {/* Filters */}
+            {error && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    {error}
+                </Alert>
+            )}
+
+            {/* Filtros modernos */}
             <Card sx={{ mb: 3 }}>
                 <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <FilterList />
-                        Filtros
-                    </Typography>
+                    <Stack spacing={3}>
+                        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+                            <TextField
+                                placeholder="Buscar por título, SKU, marca..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                sx={{ flex: 1 }}
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Search color="action" />
+                                        </InputAdornment>
+                                    ),
+                                }}
+                                size="small"
+                            />
 
-                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            label="Buscar"
-                            placeholder="SKU, marca, título..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            InputProps={{
-                                startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />,
-                            }}
-                        />
+                            <FormControl size="small" sx={{ minWidth: 120 }}>
+                                <InputLabel>Status</InputLabel>
+                                <Select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    label="Status"
+                                >
+                                    <MenuItem value="">Todos</MenuItem>
+                                    <MenuItem value="disponivel">Disponível</MenuItem>
+                                    <MenuItem value="vendido">Vendido</MenuItem>
+                                    <MenuItem value="reservado">Reservado</MenuItem>
+                                </Select>
+                            </FormControl>
 
-                        <FormControl size="small" sx={{ minWidth: 150 }}>
-                            <InputLabel>Categoria</InputLabel>
-                            <Select
-                                value={selectedCategory}
-                                label="Categoria"
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                            >
-                                <MenuItem value="">Todas</MenuItem>
-                                {categories.map(category => (
-                                    <MenuItem key={category} value={category}>
-                                        {category}
+                            <FormControl size="small" sx={{ minWidth: 120 }}>
+                                <InputLabel>Condição</InputLabel>
+                                <Select
+                                    value={conditionFilter}
+                                    onChange={(e) => setConditionFilter(e.target.value)}
+                                    label="Condição"
+                                >
+                                    <MenuItem value="">Todas</MenuItem>
+                                    <MenuItem value="novo">Novo</MenuItem>
+                                    <MenuItem value="seminovo">Semi-novo</MenuItem>
+                                    <MenuItem value="usado">Usado</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Stack>
+
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography variant="body2" color="text.secondary">
+                                Mostrando {filteredItems.length} de {items.length} itens
+                            </Typography>
+
+                            <Stack direction="row" spacing={1} alignItems="center">
+                                <Tooltip title="Atualizar">
+                                    <IconButton onClick={fetchItems} disabled={loading}>
+                                        <Refresh />
+                                    </IconButton>
+                                </Tooltip>
+
+                                <Tooltip title={viewMode === 'table' ? 'Visualização em cards' : 'Visualização em tabela'}>
+                                    <IconButton
+                                        onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}
+                                        color={viewMode === 'cards' ? 'primary' : 'default'}
+                                    >
+                                        {viewMode === 'table' ? <GridView /> : <TableRows />}
+                                    </IconButton>
+                                </Tooltip>
+
+                                <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
+                                    <MoreVert />
+                                </IconButton>
+
+                                <Menu
+                                    anchorEl={anchorEl}
+                                    open={Boolean(anchorEl)}
+                                    onClose={() => setAnchorEl(null)}
+                                >
+                                    <MenuItem>
+                                        <ListItemIcon><Download /></ListItemIcon>
+                                        <ListItemText>Exportar</ListItemText>
                                     </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-
-                        <Autocomplete
-                            size="small"
-                            sx={{ minWidth: 200 }}
-                            options={consignors}
-                            getOptionLabel={(option) => option.name}
-                            value={consignors.find(c => c.id === selectedConsignor) || null}
-                            onChange={(_, newValue) => setSelectedConsignor(newValue?.id || '')}
-                            renderInput={(params) => (
-                                <TextField {...params} label="Consignante" />
-                            )}
-                        />
-
-                        <FormControl size="small" sx={{ minWidth: 120 }}>
-                            <InputLabel>Status</InputLabel>
-                            <Select
-                                value={statusFilter}
-                                label="Status"
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                                {statusOptions.map(option => (
-                                    <MenuItem key={option.value} value={option.value}>
-                                        {option.label}
+                                    <MenuItem>
+                                        <ListItemIcon><Settings /></ListItemIcon>
+                                        <ListItemText>Configurações</ListItemText>
                                     </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                                </Menu>
+                            </Stack>
+                        </Stack>
                     </Stack>
                 </CardContent>
-            </Card>
+            </Card>            {/* Conteúdo Principal */}
+            {viewMode === 'table' ? (
+                <Card>
+                    <TableContainer>
+                        <Table sx={{ minWidth: 650 }}>
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                                    <TableCell width={60}>Foto</TableCell>
+                                    <TableCell>Produto</TableCell>
+                                    <TableCell width={100}>Condição</TableCell>
+                                    <TableCell width={120} align="right">Preço</TableCell>
+                                    <TableCell width={120} align="center">Ações</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {filteredItems
+                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                    .map((item) => (
+                                        <TableRow
+                                            key={item.sku}
+                                            hover
+                                            sx={{
+                                                '&:hover': { bgcolor: 'action.hover' },
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <TableCell onClick={() => handleViewItem(item)}>
+                                                <PhotoDisplay
+                                                    photos={getNormalizedPhotosWithUrls(item.photos)}
+                                                    alt={getItemTitle(item)}
+                                                    onClick={() => handleImageClick(getNormalizedPhotosWithUrls(item.photos))}
+                                                />
+                                            </TableCell>
 
-            {/* Results */}
-            <Card>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                        Itens ({filteredItems.length})
-                    </Typography>
-
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
-                        </Alert>
-                    )}
-
-                    {loading ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                            <CircularProgress />
-                        </Box>
-                    ) : (
-                        <>
-                            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                                <Table size="medium">
-                                    <TableHead sx={{ backgroundColor: '#f8f9fa' }}>
-                                        <TableRow>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '80px' }}>Foto</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', minWidth: '180px' }}>Título</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '120px' }}>Categoria</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Marca</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '80px' }}>Tamanho</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Condição</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '130px' }}>Consignante</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Preço</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Status</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '110px' }}>Cadastrado</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', width: '120px' }}>Ações</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {filteredItems
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((item) => (
-                                                <TableRow
-                                                    key={item.sku}
-                                                    hover
-                                                    sx={{
-                                                        '&:hover': {
-                                                            backgroundColor: '#f5f5f5'
-                                                        },
-                                                        cursor: 'pointer'
-                                                    }}
-                                                    onClick={() => handleViewItem(item)}
-                                                >
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <ItemThumbnail item={item} />
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2" sx={{
-                                                            fontWeight: 500,
-                                                            color: '#1976d2',
-                                                            cursor: 'pointer'
-                                                        }}>
-                                                            {item.summary_title || item.title_ig || `Item ${item.sku}`}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="textSecondary">
+                                            <TableCell onClick={() => handleViewItem(item)}>
+                                                <Box>
+                                                    <Typography variant="body1" fontWeight="medium" sx={{ mb: 0.5 }}>
+                                                        {getItemTitle(item)}
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                                                        {item.brand && (
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {item.brand}
+                                                            </Typography>
+                                                        )}
+                                                        <Typography variant="caption" color="text.secondary">
                                                             SKU: {item.sku}
                                                         </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
                                                         {item.category && (
-                                                            <Chip
-                                                                label={item.category}
-                                                                size="small"
-                                                                variant="outlined"
-                                                                sx={{
-                                                                    backgroundColor: '#e3f2fd',
-                                                                    borderColor: '#1976d2'
-                                                                }}
-                                                            />
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                • {item.category}
+                                                            </Typography>
                                                         )}
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2">
-                                                            {item.brand || '-'}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2" fontWeight={item.size ? 'medium' : 'normal'}>
-                                                            {item.size || '-'}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        {getConditionChip(item.condition)}
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
-                                                            {getConsignorName(item.consignor_id)}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2" fontWeight="medium" color="primary">
-                                                            {formatPrice(item.list_price || item.cost)}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        {getStatusChip(item)}
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Typography variant="body2" color="textSecondary">
-                                                            {formatDate(item.acquired_at)}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell sx={{ padding: 2 }}>
-                                                        <Stack direction="row" spacing={0.5}>
-                                                            <Tooltip title="Visualizar">
-                                                                <IconButton
-                                                                    size="small"
-                                                                    color="primary"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleViewItem(item);
-                                                                    }}
-                                                                    sx={{
-                                                                        backgroundColor: '#e3f2fd',
-                                                                        '&:hover': { backgroundColor: '#bbdefb' }
-                                                                    }}
-                                                                >
-                                                                    <Visibility fontSize="small" />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                            <Tooltip title="Editar">
-                                                                <IconButton
-                                                                    size="small"
-                                                                    color="secondary"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleEditItem(item);
-                                                                    }}
-                                                                    sx={{
-                                                                        backgroundColor: '#f3e5f5',
-                                                                        '&:hover': { backgroundColor: '#e1bee7' }
-                                                                    }}
-                                                                >
-                                                                    <Edit fontSize="small" />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                            {!item.sold_at && (
-                                                                <Tooltip title="Marcar como vendido">
-                                                                    <IconButton
-                                                                        size="small"
-                                                                        color="success"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            // TODO: Implementar função de marcar como vendido
-                                                                        }}
-                                                                        sx={{
-                                                                            backgroundColor: '#e8f5e8',
-                                                                            '&:hover': { backgroundColor: '#c8e6c9' }
-                                                                        }}
-                                                                    >
-                                                                        <ShoppingCart fontSize="small" />
-                                                                    </IconButton>
-                                                                </Tooltip>
-                                                            )}
-                                                        </Stack>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                                                    </Stack>
+                                                </Box>
+                                            </TableCell>
 
-                            <TablePagination
-                                rowsPerPageOptions={[10, 25, 50, 100]}
-                                component="div"
-                                count={filteredItems.length}
-                                rowsPerPage={rowsPerPage}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Itens por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `mais de ${to}`}`
-                                }
-                            />
-                        </>
-                    )}
-                </CardContent>
-            </Card>
+                                            <TableCell>
+                                                <ConditionChip condition={item.condition} />
+                                            </TableCell>
 
-            {/* Modal de Visualização */}
-            <Dialog
-                open={viewModalOpen}
-                onClose={handleCloseModals}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="h6">
-                        Detalhes do Item - {selectedItem?.sku}
-                    </Typography>
-                    <IconButton onClick={handleCloseModals}>
-                        <Close />
-                    </IconButton>
-                </DialogTitle>
-                <DialogContent>
-                    {selectedItem && (
-                        <Box>
-                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-                                <Box flex={1}>
-                                    <Typography variant="h6" gutterBottom>
-                                        Informações Básicas
-                                    </Typography>
-                                    <Stack spacing={2}>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">SKU</Typography>
-                                            <Typography variant="body1">{selectedItem.sku}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Categoria</Typography>
-                                            <Typography variant="body1">{selectedItem.category || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Subcategoria</Typography>
-                                            <Typography variant="body1">{selectedItem.subcategory || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Marca</Typography>
-                                            <Typography variant="body1">{selectedItem.brand || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Gênero</Typography>
-                                            <Typography variant="body1">{selectedItem.gender || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Tamanho</Typography>
-                                            <Typography variant="body1">{selectedItem.size || '-'}</Typography>
-                                        </Box>
-                                    </Stack>
-                                </Box>
+                                            <TableCell align="right">
+                                                <Typography variant="body1" fontWeight="bold" color="primary">
+                                                    R$ {getItemPrice(item).toFixed(2)}
+                                                </Typography>
+                                            </TableCell>
 
-                                <Box flex={1}>
-                                    <Typography variant="h6" gutterBottom>
-                                        Detalhes do Produto
-                                    </Typography>
-                                    <Stack spacing={2}>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Cor</Typography>
-                                            <Typography variant="body1">{selectedItem.color || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Tecido</Typography>
-                                            <Typography variant="body1">{selectedItem.fabric || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Condição</Typography>
-                                            <Typography variant="body1">{getConditionChip(selectedItem.condition)}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Defeitos</Typography>
-                                            <Typography variant="body1">{selectedItem.flaws || 'Nenhum'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" color="textSecondary">Status</Typography>
-                                            <Typography variant="body1">{getStatusChip(selectedItem)}</Typography>
-                                        </Box>
-                                    </Stack>
-                                </Box>
-                            </Stack>
+                                            <TableCell align="center">
+                                                <Stack direction="row" spacing={0.5} justifyContent="center">
+                                                    <Tooltip title="Visualizar">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleViewItem(item);
+                                                            }}
+                                                        >
+                                                            <Visibility fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Editar">
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleEditItem(item);
+                                                            }}
+                                                        >
+                                                            <Edit fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Arquivar">
+                                                        <IconButton
+                                                            size="small"
+                                                            color="error"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteItem(item);
+                                                            }}
+                                                        >
+                                                            <Delete fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Stack>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
 
-                            <Divider sx={{ my: 3 }} />
-
-                            <Typography variant="h6" gutterBottom>
-                                Informações Comerciais
-                            </Typography>
-                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Consignante</Typography>
-                                    <Typography variant="body1">{getConsignorName(selectedItem.consignor_id)}</Typography>
-                                </Box>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Preço de Custo</Typography>
-                                    <Typography variant="body1">{formatPrice(selectedItem.cost)}</Typography>
-                                </Box>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Preço de Venda</Typography>
-                                    <Typography variant="body1">{formatPrice(selectedItem.list_price)}</Typography>
-                                </Box>
-                            </Stack>
-
-                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Data de Aquisição</Typography>
-                                    <Typography variant="body1">{formatDate(selectedItem.acquired_at)}</Typography>
-                                </Box>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Data de Listagem</Typography>
-                                    <Typography variant="body1">{formatDate(selectedItem.listed_at)}</Typography>
-                                </Box>
-                                <Box flex={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">Data de Venda</Typography>
-                                    <Typography variant="body1">{formatDate(selectedItem.sold_at)}</Typography>
-                                </Box>
-                            </Stack>
-
-                            {selectedItem.title_ig && (
-                                <>
-                                    <Divider sx={{ my: 3 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Título Instagram
-                                    </Typography>
-                                    <Typography variant="body1">{selectedItem.title_ig}</Typography>
-                                </>
-                            )}
-
-                            {selectedItem.tags && (
-                                <>
-                                    <Divider sx={{ my: 2 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Tags
-                                    </Typography>
-                                    <Typography variant="body1">{selectedItem.tags}</Typography>
-                                </>
-                            )}
-
-                            {selectedItem.photos && (
-                                <>
-                                    <Divider sx={{ my: 3 }} />
-                                    <Typography variant="h6" gutterBottom>
-                                        Fotos do Item
-                                    </Typography>
-                                    <Box
-                                        sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                                            gap: 2
-                                        }}
-                                    >
-                                        {selectedItem.photos.split(',').map((photo, index) => (
-                                            <Box
-                                                key={index}
-                                                sx={{
-                                                    position: 'relative',
-                                                    paddingBottom: '100%', // Aspecto 1:1
-                                                    overflow: 'hidden',
-                                                    borderRadius: 1,
-                                                    border: '1px solid #e0e0e0',
-                                                }}
-                                            >
-                                                <img
-                                                    src={photo.trim()}
-                                                    alt={`Foto ${index + 1} do item ${selectedItem.sku}`}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        top: 0,
-                                                        left: 0,
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'cover',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                    onClick={() => window.open(photo.trim(), '_blank')}
-                                                />
-                                            </Box>
-                                        ))}
-                                    </Box>
-                                </>
-                            )}
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseModals}>Fechar</Button>
-                    <Button
-                        variant="contained"
-                        onClick={() => {
-                            handleCloseModals();
-                            if (selectedItem) handleEditItem(selectedItem);
+                    <TablePagination
+                        rowsPerPageOptions={[10, 25, 50, 100]}
+                        component="div"
+                        count={filteredItems.length}
+                        rowsPerPage={rowsPerPage}
+                        page={page}
+                        onPageChange={(_, newPage) => setPage(newPage)}
+                        onRowsPerPageChange={(event) => {
+                            setRowsPerPage(parseInt(event.target.value, 10));
+                            setPage(0);
+                        }}
+                        labelRowsPerPage="Itens por página:"
+                        labelDisplayedRows={({ from, to, count }) =>
+                            `${from}-${to} de ${count !== -1 ? count : `mais que ${to}`}`
+                        }
+                    />
+                </Card>
+            ) : (
+                // Vista em Cards
+                <Box sx={{ mb: 3 }}>
+                    <Stack
+                        direction="row"
+                        spacing={3}
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: {
+                                xs: '1fr',
+                                sm: 'repeat(2, 1fr)',
+                                md: 'repeat(3, 1fr)',
+                                lg: 'repeat(4, 1fr)'
+                            },
+                            gap: 3
                         }}
                     >
-                        Editar Item
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        {filteredItems
+                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                            .map((item) => (
+                                <Card
+                                    key={item.sku}
+                                    sx={{
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        transition: 'all 0.2s',
+                                        '&:hover': {
+                                            transform: 'translateY(-4px)',
+                                            boxShadow: 4
+                                        }
+                                    }}
+                                >
+                                    <Box
+                                        sx={{
+                                            position: 'relative',
+                                            height: 200,
+                                            overflow: 'hidden',
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => handleImageClick(getNormalizedPhotosWithUrls(item.photos))}
+                                    >
+                                        {getNormalizedPhotosWithUrls(item.photos).length > 0 ? (
+                                            <Box
+                                                component="img"
+                                                src={getNormalizedPhotosWithUrls(item.photos)[0] || DEFAULT_PLACEHOLDER}
+                                                alt={getItemTitle(item)}
+                                                sx={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover',
+                                                    transition: 'transform 0.2s',
+                                                    '&:hover': { transform: 'scale(1.05)' }
+                                                }}
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.style.display = 'none';
+                                                    if (target.parentElement) {
+                                                        target.parentElement.innerHTML = `
+                                                            <div style="
+                                                                width: 100%; 
+                                                                height: 100%; 
+                                                                background: #f5f5f5; 
+                                                                display: flex; 
+                                                                align-items: center; 
+                                                                justify-content: center;
+                                                                flex-direction: column;
+                                                            ">
+                                                                <svg width="48" height="48" fill="#ccc" viewBox="0 0 24 24">
+                                                                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                                                </svg>
+                                                                <span style="color: #999; font-size: 12px; margin-top: 8px;">Sem foto</span>
+                                                            </div>
+                                                        `;
+                                                    }
+                                                }}
+                                            />
+                                        ) : (
+                                            <Box
+                                                sx={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    bgcolor: 'grey.100',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'grey.400'
+                                                }}
+                                            >
+                                                <PhotoLibrary sx={{ fontSize: 48, mb: 1 }} />
+                                                <Typography variant="caption">Sem foto</Typography>
+                                            </Box>
+                                        )}
 
-            {/* Modal de Edição */}
-            <Dialog
-                open={editModalOpen}
-                onClose={handleCloseModals}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="h6">
-                        Editar Item - {editableItem?.sku}
-                    </Typography>
-                    <IconButton onClick={handleCloseModals}>
-                        <Close />
-                    </IconButton>
-                </DialogTitle>
-                <DialogContent>
-                    {editableItem && (
-                        <Box sx={{ mt: 1 }}>
-                            <Stack spacing={3}>
-                                <Typography variant="h6" gutterBottom>
-                                    Informações Básicas
-                                </Typography>
-
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Categoria</InputLabel>
-                                        <Select
-                                            value={editableItem.category || ''}
-                                            label="Categoria"
-                                            onChange={(e) => handleEditChange('category', e.target.value)}
-                                        >
-                                            {categories.map(cat => (
-                                                <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Subcategoria"
-                                        value={editableItem.subcategory || ''}
-                                        onChange={(e) => handleEditChange('subcategory', e.target.value)}
-                                    />
-                                </Stack>
-
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Marca"
-                                        value={editableItem.brand || ''}
-                                        onChange={(e) => handleEditChange('brand', e.target.value)}
-                                    />
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Gênero</InputLabel>
-                                        <Select
-                                            value={editableItem.gender || ''}
-                                            label="Gênero"
-                                            onChange={(e) => handleEditChange('gender', e.target.value)}
-                                        >
-                                            <MenuItem value="Feminino">Feminino</MenuItem>
-                                            <MenuItem value="Masculino">Masculino</MenuItem>
-                                            <MenuItem value="Unissex">Unissex</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Stack>
-
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Tamanho"
-                                        value={editableItem.size || ''}
-                                        onChange={(e) => handleEditChange('size', e.target.value)}
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Cor"
-                                        value={editableItem.color || ''}
-                                        onChange={(e) => handleEditChange('color', e.target.value)}
-                                    />
-                                </Stack>
-
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Tecido"
-                                        value={editableItem.fabric || ''}
-                                        onChange={(e) => handleEditChange('fabric', e.target.value)}
-                                    />
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Condição</InputLabel>
-                                        <Select
-                                            value={editableItem.condition || ''}
-                                            label="Condição"
-                                            onChange={(e) => handleEditChange('condition', e.target.value)}
-                                        >
-                                            <MenuItem value="A">A</MenuItem>
-                                            <MenuItem value="A-">A-</MenuItem>
-                                            <MenuItem value="B">B</MenuItem>
-                                            <MenuItem value="C">C</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Stack>
-
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Defeitos"
-                                    multiline
-                                    rows={2}
-                                    value={editableItem.flaws || ''}
-                                    onChange={(e) => handleEditChange('flaws', e.target.value)}
-                                />
-
-                                <Divider />
-
-                                <Typography variant="h6" gutterBottom>
-                                    Informações Comerciais
-                                </Typography>
-
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Preço de Custo (R$)"
-                                        type="number"
-                                        value={editableItem.cost || ''}
-                                        onChange={(e) => handleEditChange('cost', parseFloat(e.target.value) || 0)}
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Preço de Venda (R$)"
-                                        type="number"
-                                        value={editableItem.list_price || ''}
-                                        onChange={(e) => handleEditChange('list_price', parseFloat(e.target.value) || 0)}
-                                    />
-                                </Stack>
-
-                                <Divider />
-
-                                <Typography variant="h6" gutterBottom>
-                                    Conteúdo para Redes Sociais
-                                </Typography>
-
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Título Instagram"
-                                    multiline
-                                    rows={2}
-                                    value={editableItem.title_ig || ''}
-                                    onChange={(e) => handleEditChange('title_ig', e.target.value)}
-                                />
-
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Tags"
-                                    value={editableItem.tags || ''}
-                                    onChange={(e) => handleEditChange('tags', e.target.value)}
-                                    helperText="Tags separadas por vírgula"
-                                />
-
-                                {editableItem.photos && (
-                                    <>
-                                        <Divider />
-
-                                        <Typography variant="h6" gutterBottom>
-                                            Fotos do Item
-                                        </Typography>
+                                        {getNormalizedPhotosWithUrls(item.photos).length > 1 && (
+                                            <Badge
+                                                badgeContent={getNormalizedPhotosWithUrls(item.photos).length}
+                                                color="primary"
+                                                sx={{
+                                                    position: 'absolute',
+                                                    top: 8,
+                                                    right: 8
+                                                }}
+                                            />
+                                        )}
 
                                         <Box
                                             sx={{
-                                                display: 'grid',
-                                                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                                                gap: 1.5
+                                                position: 'absolute',
+                                                top: 8,
+                                                left: 8
                                             }}
                                         >
-                                            {editableItem.photos.split(',').map((photo, index) => (
-                                                <Box
-                                                    key={index}
-                                                    sx={{
-                                                        position: 'relative',
-                                                        paddingBottom: '100%', // Aspecto 1:1
-                                                        overflow: 'hidden',
-                                                        borderRadius: 1,
-                                                        border: '1px solid #e0e0e0',
-                                                    }}
-                                                >
-                                                    <img
-                                                        src={photo.trim()}
-                                                        alt={`Foto ${index + 1} do item ${editableItem.sku}`}
-                                                        style={{
-                                                            position: 'absolute',
-                                                            top: 0,
-                                                            left: 0,
-                                                            width: '100%',
-                                                            height: '100%',
-                                                            objectFit: 'cover',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                        onClick={() => window.open(photo.trim(), '_blank')}
-                                                    />
-                                                </Box>
-                                            ))}
+                                            <StatusChip status={item.status} />
+                                        </Box>
+                                    </Box>
+
+                                    <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography
+                                            variant="h6"
+                                            noWrap
+                                            sx={{ mb: 1, fontWeight: 'bold' }}
+                                            title={getItemTitle(item)}
+                                        >
+                                            {getItemTitle(item)}
+                                        </Typography>
+
+                                        <Stack spacing={1} sx={{ mb: 2 }}>
+                                            {item.brand && (
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {item.brand}
+                                                </Typography>
+                                            )}
+                                            <Typography variant="caption" color="text.secondary">
+                                                SKU: {item.sku} {item.category && ` • ${item.category}`}
+                                            </Typography>
+                                        </Stack>
+
+                                        <Box sx={{ mb: 2 }}>
+                                            <ConditionChip condition={item.condition} />
                                         </Box>
 
-                                        <TextField
-                                            fullWidth
-                                            size="small"
-                                            label="URLs das Fotos"
-                                            value={editableItem.photos || ''}
-                                            onChange={(e) => handleEditChange('photos', e.target.value)}
-                                            helperText="URLs separadas por vírgula"
-                                            multiline
-                                            rows={2}
-                                        />
-                                    </>
-                                )}
+                                        <Box sx={{ mt: 'auto' }}>
+                                            <Typography variant="h6" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
+                                                R$ {getItemPrice(item).toFixed(2)}
+                                            </Typography>
+
+                                            <Stack direction="row" spacing={1}>
+                                                <Button
+                                                    size="small"
+                                                    variant="outlined"
+                                                    startIcon={<Visibility />}
+                                                    onClick={() => handleViewItem(item)}
+                                                    sx={{ flex: 1 }}
+                                                >
+                                                    Ver
+                                                </Button>
+                                                <IconButton
+                                                    size="small"
+                                                    color="primary"
+                                                    onClick={() => handleEditItem(item)}
+                                                >
+                                                    <Edit />
+                                                </IconButton>
+                                                <IconButton
+                                                    size="small"
+                                                    color="error"
+                                                    onClick={() => handleDeleteItem(item)}
+                                                >
+                                                    <Delete />
+                                                </IconButton>
+                                            </Stack>
+                                        </Box>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                    </Stack>
+
+                    {/* Paginação para Cards */}
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                        <TablePagination
+                            rowsPerPageOptions={[8, 16, 32]}
+                            component="div"
+                            count={filteredItems.length}
+                            rowsPerPage={rowsPerPage}
+                            page={page}
+                            onPageChange={(_, newPage) => setPage(newPage)}
+                            onRowsPerPageChange={(event) => {
+                                setRowsPerPage(parseInt(event.target.value, 10));
+                                setPage(0);
+                            }}
+                            labelRowsPerPage="Cards por página:"
+                            labelDisplayedRows={({ from, to, count }) =>
+                                `${from}-${to} de ${count !== -1 ? count : `mais que ${to}`}`
+                            }
+                        />
+                    </Box>
+                </Box>
+            )}
+
+            {/* Modal de Visualização Moderno */}
+            <Dialog
+                open={viewModalOpen}
+                onClose={() => setViewModalOpen(false)}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+                    }
+                }}
+            >
+                {selectedItem && (
+                    <>
+                        <DialogTitle>
+                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                                <Box>
+                                    <Typography variant="h5" fontWeight="bold" color="primary" gutterBottom>
+                                        {getItemTitle(selectedItem)}
+                                    </Typography>
+                                    <Typography variant="subtitle1" color="text.secondary">
+                                        SKU: {selectedItem.sku} • {selectedItem.brand} • {selectedItem.category}
+                                    </Typography>
+                                </Box>
+                                <IconButton
+                                    onClick={() => setViewModalOpen(false)}
+                                    sx={{
+                                        bgcolor: 'rgba(255,255,255,0.2)',
+                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                                    }}
+                                >
+                                    <Close />
+                                </IconButton>
+                            </Stack>
+                        </DialogTitle>
+
+                        <DialogContent dividers sx={{ bgcolor: 'transparent' }}>
+                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+                                {/* Galeria de Fotos */}
+                                <Box sx={{ flex: 1 }}>
+                                    <Paper
+                                        elevation={4}
+                                        sx={{
+                                            p: 3,
+                                            borderRadius: 2,
+                                            background: 'white'
+                                        }}
+                                    >
+                                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                            <PhotoLibrary sx={{ mr: 1, color: 'primary.main' }} />
+                                            Fotos do Produto
+                                        </Typography>
+
+                                        {selectedItem && getNormalizedPhotosWithUrls(selectedItem.photos).length > 0 ? (
+                                            <Box>
+                                                <Box
+                                                    component="img"
+                                                    src={getNormalizedPhotosWithUrls(selectedItem.photos)[0] || DEFAULT_PLACEHOLDER}
+                                                    alt="Foto principal"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                        if (target.parentElement) {
+                                                            target.parentElement.innerHTML = `
+                                                                <div style="
+                                                                    width: 100%; 
+                                                                    height: 250px; 
+                                                                    background: #f5f5f5; 
+                                                                    display: flex; 
+                                                                    align-items: center; 
+                                                                    justify-content: center;
+                                                                    border-radius: 8px;
+                                                                    flex-direction: column;
+                                                                ">
+                                                                    <svg width="48" height="48" fill="#ccc" viewBox="0 0 24 24">
+                                                                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                                                    </svg>
+                                                                    <span style="color: #999; font-size: 14px; margin-top: 8px;">Foto não disponível</span>
+                                                                </div>
+                                                            `;
+                                                        }
+                                                    }}
+                                                    sx={{
+                                                        width: '100%',
+                                                        height: 250,
+                                                        objectFit: 'cover',
+                                                        borderRadius: 2,
+                                                        cursor: 'pointer',
+                                                        transition: 'transform 0.2s',
+                                                        '&:hover': { transform: 'scale(1.02)' }
+                                                    }}
+                                                    onClick={() => handleImageClick(normalizePhotos(selectedItem.photos), 0)}
+                                                />
+
+                                                {getNormalizedPhotosWithUrls(selectedItem.photos).length > 1 && (
+                                                    <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
+                                                        {getNormalizedPhotosWithUrls(selectedItem.photos).slice(1, 5).map((photo: string, index: number) => (
+                                                            <Box
+                                                                key={index + 1}
+                                                                component="img"
+                                                                src={photo}
+                                                                alt={`Foto ${index + 2}`}
+                                                                sx={{
+                                                                    width: 60,
+                                                                    height: 60,
+                                                                    objectFit: 'cover',
+                                                                    borderRadius: 1,
+                                                                    cursor: 'pointer',
+                                                                    border: '2px solid transparent',
+                                                                    '&:hover': { borderColor: 'primary.main' },
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                                onClick={() => handleImageClick(getNormalizedPhotosWithUrls(selectedItem.photos), index + 1)}
+                                                            />
+                                                        ))}
+                                                        {getNormalizedPhotosWithUrls(selectedItem.photos).length > 5 && (
+                                                            <Box
+                                                                sx={{
+                                                                    width: 60,
+                                                                    height: 60,
+                                                                    bgcolor: 'grey.200',
+                                                                    borderRadius: 1,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    cursor: 'pointer',
+                                                                    '&:hover': { bgcolor: 'grey.300' }
+                                                                }}
+                                                                onClick={() => handleImageClick(getNormalizedPhotosWithUrls(selectedItem.photos), 0)}
+                                                            >
+                                                                <Typography variant="caption" fontWeight="bold">
+                                                                    +{getNormalizedPhotosWithUrls(selectedItem.photos).length - 5}
+                                                                </Typography>
+                                                            </Box>
+                                                        )}
+                                                    </Stack>
+                                                )}
+                                            </Box>
+                                        ) : (
+                                            <Box
+                                                sx={{
+                                                    height: 250,
+                                                    bgcolor: 'grey.100',
+                                                    borderRadius: 2,
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    border: '2px dashed',
+                                                    borderColor: 'grey.300'
+                                                }}
+                                            >
+                                                <PhotoLibrary sx={{ fontSize: 48, color: 'grey.400', mb: 1 }} />
+                                                <Typography color="text.secondary">
+                                                    Nenhuma foto disponível
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                    </Paper>
+                                </Box>
+
+                                {/* Informações do Produto */}
+                                <Box sx={{ flex: 1 }}>
+                                    <Stack spacing={3}>
+                                        {/* Informações Principais */}
+                                        <Paper
+                                            elevation={4}
+                                            sx={{
+                                                p: 3,
+                                                borderRadius: 2,
+                                                background: 'white'
+                                            }}
+                                        >
+                                            <Typography variant="h6" gutterBottom sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+                                                <Inventory sx={{ mr: 1, color: 'primary.main' }} />
+                                                Informações do Produto
+                                            </Typography>
+
+                                            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                                                <Box sx={{ flex: 1, textAlign: 'center' }}>
+                                                    <Typography variant="h4" color="primary" fontWeight="bold">
+                                                        R$ {getItemPrice(selectedItem).toFixed(2)}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Preço de Venda
+                                                    </Typography>
+                                                </Box>
+                                                <Divider orientation="vertical" flexItem />
+                                                <Box sx={{ flex: 1, textAlign: 'center' }}>
+                                                    <StatusChip status={selectedItem.status} />
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                                                        Status Atual
+                                                    </Typography>
+                                                </Box>
+                                                <Divider orientation="vertical" flexItem />
+                                                <Box sx={{ flex: 1, textAlign: 'center' }}>
+                                                    <Typography variant="h6" fontWeight="bold">
+                                                        {selectedItem.sku}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        SKU
+                                                    </Typography>
+                                                </Box>
+                                            </Stack>
+
+                                            <Divider sx={{ my: 2 }} />
+
+                                            <Stack spacing={2}>
+                                                {/* Linha 1 */}
+                                                <Stack direction="row" spacing={3}>
+                                                    <Box sx={{ flex: 1 }}>
+                                                        <Typography color="text.secondary" variant="body2">Condição:</Typography>
+                                                        <ConditionChip condition={selectedItem.condition} />
+                                                    </Box>
+                                                    {selectedItem.category && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Categoria:</Typography>
+                                                            <Typography fontWeight="medium">{selectedItem.category}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {selectedItem.brand && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Marca:</Typography>
+                                                            <Typography fontWeight="medium">{selectedItem.brand}</Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+
+                                                {/* Linha 2 */}
+                                                <Stack direction="row" spacing={3}>
+                                                    {selectedItem.size && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Tamanho:</Typography>
+                                                            <Typography fontWeight="medium">{selectedItem.size}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {selectedItem.color && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Cor:</Typography>
+                                                            <Typography fontWeight="medium">{selectedItem.color}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {selectedItem.location && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Localização:</Typography>
+                                                            <Typography fontWeight="medium">{selectedItem.location}</Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+
+                                                {/* Linha 3 - Campos dinâmicos do banco */}
+                                                <Stack direction="row" spacing={3}>
+                                                    {(selectedItem as any).subcategory && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Subcategoria:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).subcategory}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).gender && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Gênero:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).gender}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).fabric && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Tecido:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).fabric}</Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+
+                                                {/* Linha 4 - Mais campos */}
+                                                <Stack direction="row" spacing={3}>
+                                                    {(selectedItem as any).fit && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Modelagem:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).fit}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).acquisition_type && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Aquisição:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).acquisition_type}</Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).consignor_id && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Consignante:</Typography>
+                                                            <Typography fontWeight="medium">{(selectedItem as any).consignor_id}</Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+
+                                                {/* Medidas se disponíveis */}
+                                                {((selectedItem as any).bust || (selectedItem as any).waist || (selectedItem as any).length) && (
+                                                    <>
+                                                        <Divider sx={{ my: 1 }} />
+                                                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                                            Medidas (cm):
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={3}>
+                                                            {(selectedItem as any).bust && (
+                                                                <Box sx={{ flex: 1 }}>
+                                                                    <Typography color="text.secondary" variant="body2">Busto:</Typography>
+                                                                    <Typography fontWeight="medium">{(selectedItem as any).bust} cm</Typography>
+                                                                </Box>
+                                                            )}
+                                                            {(selectedItem as any).waist && (
+                                                                <Box sx={{ flex: 1 }}>
+                                                                    <Typography color="text.secondary" variant="body2">Cintura:</Typography>
+                                                                    <Typography fontWeight="medium">{(selectedItem as any).waist} cm</Typography>
+                                                                </Box>
+                                                            )}
+                                                            {(selectedItem as any).length && (
+                                                                <Box sx={{ flex: 1 }}>
+                                                                    <Typography color="text.secondary" variant="body2">Comprimento:</Typography>
+                                                                    <Typography fontWeight="medium">{(selectedItem as any).length} cm</Typography>
+                                                                </Box>
+                                                            )}
+                                                        </Stack>
+                                                    </>
+                                                )}
+
+                                                {/* Defeitos se disponíveis */}
+                                                {(selectedItem as any).flaws && (
+                                                    <>
+                                                        <Divider sx={{ my: 1 }} />
+                                                        <Box>
+                                                            <Typography color="text.secondary" variant="body2">Defeitos:</Typography>
+                                                            <Typography fontWeight="medium" color="warning.main">
+                                                                {(selectedItem as any).flaws}
+                                                            </Typography>
+                                                        </Box>
+                                                    </>
+                                                )}
+                                            </Stack>
+                                        </Paper>
+
+                                        {/* Descrição e Notas */}
+                                        <Paper
+                                            elevation={4}
+                                            sx={{
+                                                p: 3,
+                                                borderRadius: 2,
+                                                background: 'white'
+                                            }}
+                                        >
+                                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                                <Edit sx={{ mr: 1, color: 'primary.main' }} />
+                                                Descrições e Observações
+                                            </Typography>
+
+                                            <Stack spacing={2}>
+                                                {selectedItem.description && (
+                                                    <Box>
+                                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                                            Descrição:
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ lineHeight: 1.6, bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+                                                            {selectedItem.description}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
+                                                {(selectedItem as any).notes && (
+                                                    <Box>
+                                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                                            Observações:
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ lineHeight: 1.6, bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+                                                            {(selectedItem as any).notes}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
+                                                {(selectedItem as any).tags && (
+                                                    <Box>
+                                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                                            Tags:
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ lineHeight: 1.6, bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+                                                            {(selectedItem as any).tags}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
+                                                {/* Datas importantes */}
+                                                <Divider />
+                                                <Stack direction="row" spacing={3}>
+                                                    {(selectedItem as any).created_at && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Cadastrado em:</Typography>
+                                                            <Typography variant="body2" fontWeight="medium">
+                                                                {new Date((selectedItem as any).created_at).toLocaleDateString('pt-BR')}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).listed_at && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Listado em:</Typography>
+                                                            <Typography variant="body2" fontWeight="medium">
+                                                                {new Date((selectedItem as any).listed_at).toLocaleDateString('pt-BR')}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    {(selectedItem as any).sold_at && (
+                                                        <Box sx={{ flex: 1 }}>
+                                                            <Typography color="text.secondary" variant="body2">Vendido em:</Typography>
+                                                            <Typography variant="body2" fontWeight="medium" color="success.main">
+                                                                {new Date((selectedItem as any).sold_at).toLocaleDateString('pt-BR')}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+                                            </Stack>
+                                        </Paper>
+                                    </Stack>
+                                </Box>
+                            </Stack>
+                        </DialogContent>
+
+                        <DialogActions sx={{ p: 3 }}>
+                            <Button onClick={() => setViewModalOpen(false)} variant="outlined">
+                                Fechar
+                            </Button>
+                            <Button
+                                variant="contained"
+                                startIcon={<Edit />}
+                                onClick={() => selectedItem && handleEditItem(selectedItem)}
+                            >
+                                Editar Item
+                            </Button>
+                        </DialogActions>
+                    </>
+                )}
+            </Dialog>
+
+            {/* Visualizador de Imagens */}
+            <Dialog
+                open={imageViewerOpen}
+                onClose={() => setImageViewerOpen(false)}
+                maxWidth="lg"
+                fullWidth
+                PaperProps={{
+                    sx: { bgcolor: 'black', color: 'white' }
+                }}
+            >
+                <DialogTitle sx={{ bgcolor: 'rgba(0,0,0,0.8)' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography color="white">
+                            Foto {currentImageIndex + 1} de {selectedItem ? getNormalizedPhotosWithUrls(selectedItem.photos).length : 0}
+                        </Typography>
+                        <IconButton onClick={() => setImageViewerOpen(false)} sx={{ color: 'white' }}>
+                            <Close />
+                        </IconButton>
+                    </Stack>
+                </DialogTitle>
+
+                <DialogContent sx={{ bgcolor: 'black', p: 0, textAlign: 'center' }}>
+                    {selectedItem && getNormalizedPhotosWithUrls(selectedItem.photos).length > 0 && (
+                        <Box sx={{ position: 'relative' }}>
+                            <Box
+                                component="img"
+                                src={getNormalizedPhotosWithUrls(selectedItem.photos)[currentImageIndex] || DEFAULT_PLACEHOLDER}
+                                alt={`Foto ${currentImageIndex + 1}`}
+                                sx={{
+                                    maxWidth: '100%',
+                                    maxHeight: '70vh',
+                                    objectFit: 'contain'
+                                }}
+                            />
+
+                            {/* Controles de navegação */}
+                            <Stack
+                                direction="row"
+                                justifyContent="center"
+                                spacing={2}
+                                sx={{
+                                    position: 'absolute',
+                                    bottom: 20,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    bgcolor: 'rgba(0,0,0,0.7)',
+                                    borderRadius: 2,
+                                    p: 1
+                                }}
+                            >
+                                <IconButton
+                                    onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
+                                    disabled={currentImageIndex === 0}
+                                    sx={{ color: 'white' }}
+                                >
+                                    ←
+                                </IconButton>
+                                <IconButton
+                                    onClick={() => setCurrentImageIndex(Math.min(getNormalizedPhotosWithUrls(selectedItem!.photos).length - 1, currentImageIndex + 1))}
+                                    disabled={currentImageIndex === getNormalizedPhotosWithUrls(selectedItem!.photos).length - 1}
+                                    sx={{ color: 'white' }}
+                                >
+                                    →
+                                </IconButton>
                             </Stack>
                         </Box>
                     )}
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseModals}>Cancelar</Button>
+            </Dialog>
+
+            {/* Modal de Confirmação de Exclusão */}
+            <Dialog
+                open={deleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                        <Delete color="error" />
+                        <Typography variant="h6">
+                            Arquivar Item
+                        </Typography>
+                    </Stack>
+                </DialogTitle>
+
+                <DialogContent>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                        Tem certeza que deseja arquivar este item?
+                    </Typography>
+
+                    {selectedItem && (
+                        <Box sx={{
+                            p: 2,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'grey.200'
+                        }}>
+                            <Typography variant="subtitle2" fontWeight="bold">
+                                {getItemTitle(selectedItem)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                SKU: {selectedItem.sku}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Preço: R$ {getItemPrice(selectedItem).toFixed(2)}
+                            </Typography>
+                        </Box>
+                    )}
+
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                        <strong>Nota:</strong> O item será arquivado e não aparecerá mais na lista,
+                        mas permanecerá no sistema para consultas futuras.
+                    </Typography>
+                </DialogContent>
+
+                <DialogActions sx={{ p: 3 }}>
                     <Button
-                        variant="contained"
-                        onClick={handleSaveEdit}
-                        color="primary"
+                        onClick={() => setDeleteModalOpen(false)}
+                        variant="outlined"
                     >
-                        Salvar Alterações
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={confirmDeleteItem}
+                        variant="contained"
+                        color="error"
+                        startIcon={<Delete />}
+                        disabled={loading}
+                    >
+                        {loading ? 'Arquivando...' : 'Arquivar Item'}
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* FAB para adicionar novo item */}
+            <Fab
+                color="primary"
+                aria-label="add"
+                sx={{
+                    position: 'fixed',
+                    bottom: 24,
+                    right: 24,
+                    boxShadow: 4
+                }}
+                onClick={handleAddNewItem}
+            >
+                <Add />
+            </Fab>
         </Box>
     );
 };
 
-export default Items;
+export default ItemsPage;

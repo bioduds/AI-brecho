@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from models import Consignor, Item, Sale
-from schemas import ConsignorCreate, ItemCreate, SaleCreate
+from schemas import ConsignorCreate, ItemCreate, ItemUpdate, SaleCreate
 import json
 
 
@@ -13,7 +13,13 @@ def get_consignor(db: Session, consignor_id: str):
 
 
 def get_consignors(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(Consignor).filter(Consignor.active == True).offset(skip).limit(limit).all()
+    return (
+        db.query(Consignor)
+        .filter(Consignor.active == True)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 def create_consignor(db: Session, consignor: ConsignorCreate):
@@ -29,21 +35,21 @@ def get_item(db: Session, sku: str):
 
 
 def get_items(
-    db: Session, 
-    skip: int = 0, 
+    db: Session,
+    skip: int = 0,
     limit: int = 100,
     consignor_id: Optional[str] = None,
     category: Optional[str] = None,
-    active: bool = True
+    active: bool = True,
 ):
     query = db.query(Item).filter(Item.active == active)
-    
+
     if consignor_id:
         query = query.filter(Item.consignor_id == consignor_id)
-    
+
     if category:
         query = query.filter(Item.category == category)
-    
+
     return query.offset(skip).limit(limit).all()
 
 
@@ -55,16 +61,17 @@ def create_item(db: Session, item: ItemCreate):
     return db_item
 
 
-def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict, 
-                                  ai_result: dict, images_b64: list = None):
+def create_item_from_ai_proposal(
+    db: Session, sku: str, proposal: dict, ai_result: dict, images_b64: list = None
+):
     """Create item from AI intake proposal"""
     from ai_services import save_item_images
     from models import ItemDynamicField
-    
+
     cadastro = proposal.get("cadastro", {})
     price_info = proposal.get("price", {})
     dynamic_fields = proposal.get("dynamic_fields", {})
-    
+
     # Parse price range if available
     list_price = None
     price_range = price_info.get("Faixa", "")
@@ -75,15 +82,15 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
             list_price = float(price_str)
         except Exception:
             pass
-    
+
     # Save images and get URLs
     photo_urls = []
     if images_b64:
         photo_urls = save_item_images(sku, images_b64)
-    
+
     # Generate summary title
     summary_title = generate_item_summary_title(cadastro)
-    
+
     item_data = {
         "sku": sku,
         "consignor_id": proposal.get("consignor_id"),
@@ -98,24 +105,26 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
         "condition": cadastro.get("Condição"),
         "flaws": cadastro.get("Defeitos"),
         "title_ig": cadastro.get("TituloIG"),
-        "tags": (json.dumps(cadastro.get("Tags", [])) 
-                 if cadastro.get("Tags") else None),
-        "photos": (",".join(photo_urls) 
-                   if photo_urls else None),  # Store as comma-separated URLs
+        "tags": (
+            json.dumps(cadastro.get("Tags", [])) if cadastro.get("Tags") else None
+        ),
+        "photos": (
+            ",".join(photo_urls) if photo_urls else None
+        ),  # Store as comma-separated URLs
         "list_price": list_price,
         "ai_confidence": 0.8,  # Default confidence
         "ai_similar_items": json.dumps(
             ai_result.get("similar_items", []) if ai_result else []
         ),
         "notes": f"AI Auto-intake: {price_info.get('Motivo', '')}",
-        "summary_title": summary_title  # Add summary title
+        "summary_title": summary_title,  # Add summary title
     }
-    
+
     db_item = Item(**item_data)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
-    
+
     # Save dynamic fields
     if dynamic_fields:
         for field_name, field_value in dynamic_fields.items():
@@ -124,45 +133,47 @@ def create_item_from_ai_proposal(db: Session, sku: str, proposal: dict,
                     item_sku=sku,
                     field_name=field_name,
                     field_value=str(field_value),
-                    field_type="text"  # Could be enhanced to detect type
+                    field_type="text",  # Could be enhanced to detect type
                 )
                 db.add(dynamic_field)
-        
+
         db.commit()
-    
+
     return db_item
 
 
 def generate_item_summary_title(cadastro: dict) -> str:
     """Generate a summary title for the item"""
     parts = []
-    
+
     # Add brand if available
     if cadastro.get("Marca"):
         parts.append(cadastro["Marca"])
-    
+
     # Add category and subcategory
     if cadastro.get("Categoria"):
         parts.append(cadastro["Categoria"])
-    if cadastro.get("Subcategoria") and cadastro["Subcategoria"] != cadastro.get("Categoria"):
+    if cadastro.get("Subcategoria") and cadastro["Subcategoria"] != cadastro.get(
+        "Categoria"
+    ):
         parts.append(cadastro["Subcategoria"])
-    
+
     # Add gender if available
     if cadastro.get("Gênero"):
         parts.append(cadastro["Gênero"])
-    
+
     # Add size if available
     if cadastro.get("Tamanho"):
         parts.append(f"Tam {cadastro['Tamanho']}")
-    
+
     # Add color if available
     if cadastro.get("Cor"):
         parts.append(cadastro["Cor"])
-    
+
     # Add condition if available
     if cadastro.get("Condição"):
         parts.append(f"({cadastro['Condição']})")
-    
+
     return " ".join(parts) if parts else "Item sem título"
 
 
@@ -179,7 +190,7 @@ def create_sale(db: Session, sale: SaleCreate):
     db.add(db_sale)
     db.commit()
     db.refresh(db_sale)
-    
+
     # Update item as sold
     item = get_item(db, sale.sku)
     if item:
@@ -191,7 +202,7 @@ def create_sale(db: Session, sale: SaleCreate):
             days_diff = (sale.date - item.acquired_at).days
             item.days_on_hand = days_diff
         db.commit()
-    
+
     return db_sale
 
 
@@ -200,17 +211,38 @@ def get_dashboard_stats(db: Session):
     total_items = db.query(Item).filter(Item.active == True).count()
     total_sold = db.query(Item).filter(Item.sold_at.isnot(None)).count()
     total_available = total_items - total_sold
-    
-    total_sales_value = db.query(Sale).with_entities(
-        db.func.sum(Sale.sale_price)
-    ).scalar() or 0
-    
+
+    total_sales_value = (
+        db.query(Sale).with_entities(db.func.sum(Sale.sale_price)).scalar() or 0
+    )
+
     recent_sales = db.query(Sale).order_by(Sale.date.desc()).limit(10).all()
-    
+
     return {
         "total_items": total_items,
         "total_sold": total_sold,
         "total_available": total_available,
         "total_sales_value": float(total_sales_value),
-        "recent_sales": recent_sales
+        "recent_sales": recent_sales,
     }
+
+
+def get_item_by_sku(db: Session, sku: str):
+    """Get item by SKU"""
+    return db.query(Item).filter(Item.sku == sku).first()
+
+
+def update_item(db: Session, sku: str, item_update: ItemUpdate):
+    """Update an item"""
+    db_item = get_item_by_sku(db, sku)
+    if not db_item:
+        return None
+
+    # Update only provided fields
+    update_data = item_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_item, field, value)
+
+    db.commit()
+    db.refresh(db_item)
+    return db_item

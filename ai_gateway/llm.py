@@ -29,20 +29,22 @@ SYS_PRICE = (
     "detalhada baseada no tipo de item'}"
 )
 
+
 def image_to_base64(pil_image):
     """Converte imagem PIL para base64"""
     buffer = BytesIO()
-    pil_image.save(buffer, format='JPEG')
+    pil_image.save(buffer, format="JPEG")
     img_bytes = buffer.getvalue()
-    return base64.b64encode(img_bytes).decode('utf-8')
+    return base64.b64encode(img_bytes).decode("utf-8")
 
 
-def ollama_multimodal_analyze(images, prompt: str, system: str = "",
-                              audio_base64: Optional[str] = None) -> str:
+def ollama_multimodal_analyze(
+    images, prompt: str, system: str = "", audio_base64: Optional[str] = None
+) -> str:
     """Análise multimodal usando Ollama com imagens e opcionalmente áudio"""
     # Converter imagens para base64
     image_data = [image_to_base64(img) for img in images]
-    
+
     # Se há áudio, incluir informação no prompt
     if audio_base64:
         prompt = f"""IMPORTANTE: O usuário forneceu uma gravação de áudio em português 
@@ -53,18 +55,18 @@ def ollama_multimodal_analyze(images, prompt: str, system: str = "",
         capturar todos os detalhes que uma pessoa descreveria ao falar sobre a peça.
         
         {prompt}"""
-    
+
     data = {
         "model": GEMMA_MODEL,
         "prompt": (system + "\n\n" + prompt).strip(),
         "images": image_data,
         "stream": False,
-        "options": {"temperature": 0.3}
+        "options": {"temperature": 0.3},
     }
-    
+
     # NOTA: Não enviamos áudio diretamente pois o Ollama/Gemma pode não suportar
     # A informação do áudio está incluída no prompt acima
-    
+
     try:
         r = requests.post(OLLAMA_URL, json=data, timeout=300)  # 5 minutos
         r.raise_for_status()
@@ -79,14 +81,15 @@ def ollama_generate(prompt: str, system: str = "") -> str:
         "model": GEMMA_MODEL,
         "prompt": (system + "\n\n" + prompt).strip(),
         "stream": False,
-        "options": {"temperature": 0.2}
+        "options": {"temperature": 0.2},
     }
     r = requests.post(OLLAMA_URL, json=data, timeout=180)  # 3 minutos
     r.raise_for_status()
-    return r.json().get("response","").strip()
+    return r.json().get("response", "").strip()
+
 
 def _parse_json(txt: str) -> dict:
-    m = re.search(r'\{.*\}', txt, re.S)
+    m = re.search(r"\{.*\}", txt, re.S)
     if not m:
         return {}
     try:
@@ -94,9 +97,10 @@ def _parse_json(txt: str) -> dict:
     except Exception:
         return {}
 
+
 def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dict:
     """Análise multimodal completa das imagens e áudio (convertido para texto)"""
-    
+
     # Convert audio to text if provided
     audio_description = ""
     if audio_base64 and is_whisper_available():
@@ -116,38 +120,34 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         print("Áudio fornecido mas Whisper não está disponível")
     else:
         print("Nenhum áudio fornecido")
-    
+
     prompt = (
         "Analise as imagens e identifique o item. Seja INTELIGENTE na escolha dos campos! "
         f"{audio_description}"
-        
         "INSTRUÇÕES DINÂMICAS: "
         "1. Identifique PRIMEIRO o tipo de item (roupa, eletrônico, decoração, iluminação, etc.) "
         "2. Escolha APENAS os campos RELEVANTES para esse tipo específico "
         "3. Use nomes de campos em português, descritivos e úteis "
-        
         "EXEMPLOS de campos inteligentes por categoria: "
         "• ROUPA: categoria, subcategoria, tamanho, genero, tecido, cor, estacao, modelagem, marca, condicao "
         "• LUMINÁRIA: categoria, tipo_luminaria, fonte_luz, potencia, voltagem, material, cor, estilo, marca, condicao "
         "• ELETRÔNICO: categoria, tipo_eletronico, marca, modelo, funcionalidade, conectividade, voltagem, cor, condicao "
         "• DECORAÇÃO: categoria, tipo_decoracao, material, estilo, dimensoes, cor, epoca, funcao, marca, condicao "
-        
         "CAMPOS OBRIGATÓRIOS que SEMPRE devem estar presentes: "
         "- categoria: tipo principal do item "
         "- cor: cor predominante "
         "- condicao: A, A-, B ou C baseado no estado visual "
+        "- TituloIG: título atrativo e descritivo para Instagram (ex: 'Vestido Floral Vintage', 'Luminária Industrial Moderna') "
         "- descricao_completa: 2-3 frases descrevendo detalhadamente "
         "- preco_minimo: valor numérico inteiro (sem R$) "
         "- preco_maximo: valor numérico inteiro (sem R$) "
         "- preco_sugerido: valor numérico inteiro recomendado para venda (sem R$) "
         "- motivo_preco: justificativa da precificação baseada no tipo, estado e marca "
-        
         "NUNCA inclua campos irrelevantes! Para luminária NÃO coloque 'tecido' ou 'genero'! "
         "NUNCA invente marcas - use 'Não identificada' se não conseguir ler. "
-        
         "Retorne JSON com campos inteligentes e relevantes apenas."
     )
-    
+
     system = (
         "Você é um especialista em análise inteligente de itens para brechó. "
         "REGRAS FUNDAMENTAIS: "
@@ -156,16 +156,20 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         "3. Seja preciso e baseado apenas no que vê nas fotos "
         "4. Condição: A=perfeito, A-=ótimo, B=bom com sinais, C=desgaste visível "
         "5. Descrição completa: 2-3 frases sobre o item e suas características "
+        "6. TituloIG: Crie um título atrativo estilo Instagram, máx 60 caracteres, com categoria + características marcantes (ex: 'Blusa Vintage Floral', 'Luminária Industrial Bronze', 'Tênis Nike Branco') "
         "SEJA DINÂMICO E INTELIGENTE NA ESCOLHA DOS CAMPOS!"
     )
-    
+
     response = ollama_multimodal_analyze(images, prompt, system, audio_base64)
     return _parse_json(response)
 
 
 def intake_normalize(context: dict) -> dict:
-    prompt = "Dados para padronizar (PT-BR) em JSON válido:\n" + json.dumps(context, ensure_ascii=False)
+    prompt = "Dados para padronizar (PT-BR) em JSON válido:\n" + json.dumps(
+        context, ensure_ascii=False
+    )
     return _parse_json(ollama_generate(prompt, system=SYS_INTAKE))
+
 
 def price_suggest(context: dict) -> dict:
     prompt = "Contexto de preço (PT-BR):\n" + json.dumps(context, ensure_ascii=False)
