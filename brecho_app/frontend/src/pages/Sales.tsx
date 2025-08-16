@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Box,
     Typography,
@@ -80,16 +81,32 @@ interface Consignor {
 }
 
 const Sales: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Parse URL parameters
+    const searchParams = new URLSearchParams(location.search);
+    const urlAction = searchParams.get('action');
+    const urlView = searchParams.get('view');
+    const urlEdit = searchParams.get('edit');
+    const urlFilter = searchParams.get('filter');
+    const urlConsignor = searchParams.get('consignor');
+
     const [sales, setSales] = useState<Sale[]>([]);
     const [items, setItems] = useState<Item[]>([]);
     const [consignors, setConsignors] = useState<Consignor[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Dialog states
-    const [openDialog, setOpenDialog] = useState(false);
+    // Dialog states - initialize from URL params
+    const [openDialog, setOpenDialog] = useState(urlAction === 'add');
     const [editingSale, setEditingSale] = useState<Sale | null>(null);
     const [viewingSale, setViewingSale] = useState<Sale | null>(null);
+
+    // Filter states
+    const [filterConsignor, setFilterConsignor] = useState<string>(urlConsignor || '');
+    const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+    const [filterDateTo, setFilterDateTo] = useState<string>('');
 
     // Form states
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -152,6 +169,35 @@ const Sales: React.FC = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    // Handle URL parameters
+    useEffect(() => {
+        if (urlView && sales.length > 0) {
+            const saleToView = sales.find(sale => sale.id === urlView);
+            if (saleToView) {
+                setViewingSale(saleToView);
+            }
+        }
+
+        if (urlEdit && sales.length > 0) {
+            const saleToEdit = sales.find(sale => sale.id === urlEdit);
+            if (saleToEdit) {
+                handleOpenDialog(saleToEdit);
+            }
+        }
+    }, [urlView, urlEdit, sales]);
+
+    // Handle monthly filter
+    useEffect(() => {
+        if (urlFilter === 'current-month') {
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+            setFilterDateFrom(firstDay.toISOString().split('T')[0]);
+            setFilterDateTo(lastDay.toISOString().split('T')[0]);
+        }
+    }, [urlFilter]);
 
     const handleOpenDialog = (sale?: Sale) => {
         if (sale) {
@@ -292,6 +338,25 @@ const Sales: React.FC = () => {
 
             const matchesPayment = !filterPayment || sale.payment_method === filterPayment;
 
+            // Filter by consignor from URL parameter
+            const matchesConsignor = !filterConsignor ||
+                (sale.item?.consignor_name &&
+                    sale.item.consignor_name.toLowerCase().includes(filterConsignor.toLowerCase()));
+
+            // Filter by date range
+            const matchesDateRange = (() => {
+                if (!filterDateFrom && !filterDateTo) return true;
+
+                const saleDate = new Date(sale.date);
+                const fromDate = filterDateFrom ? new Date(filterDateFrom) : null;
+                const toDate = filterDateTo ? new Date(filterDateTo) : null;
+
+                if (fromDate && saleDate < fromDate) return false;
+                if (toDate && saleDate > toDate) return false;
+
+                return true;
+            })();
+
             const matchesPeriod = !filterPeriod || (() => {
                 const saleDate = new Date(sale.date);
                 const now = new Date();
@@ -309,7 +374,7 @@ const Sales: React.FC = () => {
                 }
             })();
 
-            return matchesSearch && matchesPayment && matchesPeriod;
+            return matchesSearch && matchesPayment && matchesConsignor && matchesDateRange && matchesPeriod;
         });
     };
 

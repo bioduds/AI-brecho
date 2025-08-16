@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Box,
     Typography,
@@ -106,6 +107,16 @@ interface Item {
 }
 
 const ItemsPage: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Parse URL parameters
+    const searchParams = new URLSearchParams(location.search);
+    const urlFilter = searchParams.get('filter');
+    const urlAction = searchParams.get('action');
+    const urlSearch = searchParams.get('search');
+    const urlConsignor = searchParams.get('consignor');
+
     // Estados básicos
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(false);
@@ -113,11 +124,12 @@ const ItemsPage: React.FC = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(25);
 
-    // Estados de busca e filtros
-    const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    // Estados de busca e filtros - initialize from URL params
+    const [searchTerm, setSearchTerm] = useState(urlSearch || '');
+    const [statusFilter, setStatusFilter] = useState(urlFilter === 'active' ? 'true' : '');
     const [categoryFilter, setCategoryFilter] = useState('');
     const [conditionFilter, setConditionFilter] = useState('');
+    const [consignorFilter, setConsignorFilter] = useState(urlConsignor || '');
 
     // Estados de visualização
     const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -126,6 +138,7 @@ const ItemsPage: React.FC = () => {
     const [imageViewerOpen, setImageViewerOpen] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [addModalOpen, setAddModalOpen] = useState(urlAction === 'add');
 
     // Menu de ações
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -220,10 +233,15 @@ const ItemsPage: React.FC = () => {
         return 'disponivel';
     };
 
-    // Filtrar itens (excluir arquivados)
+    // Filtrar itens
     const filteredItems = items.filter(item => {
-        // Excluir itens arquivados
-        if (item.active === false) {
+        // Se o filtro for 'active', mostrar apenas itens ativos
+        if (urlFilter === 'active' && !item.active) {
+            return false;
+        }
+
+        // Caso contrário, excluir apenas itens arquivados (active === false)
+        if (!urlFilter && item.active === false) {
             return false;
         }
 
@@ -238,11 +256,15 @@ const ItemsPage: React.FC = () => {
         ].filter(Boolean).join(' ').toLowerCase();
 
         const matchesSearch = !searchTerm || searchFields.includes(searchTerm.toLowerCase());
-        const matchesStatus = !statusFilter || item.status === statusFilter;
+        const matchesStatus = !statusFilter || (statusFilter === 'true' ? item.active : item.status === statusFilter);
         const matchesCategory = !categoryFilter || item.category === categoryFilter;
         const matchesCondition = !conditionFilter || item.condition === conditionFilter;
 
-        return matchesSearch && matchesStatus && matchesCategory && matchesCondition;
+        // Filter by consignor if specified
+        const matchesConsignor = !consignorFilter || (item.consignor_id &&
+            item.consignor_id.toLowerCase().includes(consignorFilter.toLowerCase()));
+
+        return matchesSearch && matchesStatus && matchesCategory && matchesCondition && matchesConsignor;
     });
 
     // Handlers

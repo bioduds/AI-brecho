@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Box,
     Typography,
@@ -35,17 +36,27 @@ import {
     Email,
     Pix,
     Download,
+    Search,
 } from '@mui/icons-material';
 import { consignorAPI, Consignor } from '../services/api';
 
 const Consignors: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Parse URL parameters
+    const searchParams = new URLSearchParams(location.search);
+    const urlAction = searchParams.get('action');
+    const urlSearch = searchParams.get('search');
+
     const [consignors, setConsignors] = useState<Consignor[]>([]);
     const [loading, setLoading] = useState(true);
-    const [openDialog, setOpenDialog] = useState(false);
+    const [openDialog, setOpenDialog] = useState(urlAction === 'add');
     const [editingConsignor, setEditingConsignor] = useState<Consignor | null>(null);
     const [qrDialog, setQrDialog] = useState(false);
     const [qrCode, setQrCode] = useState<string>('');
     const [selectedConsignor, setSelectedConsignor] = useState<Consignor | null>(null);
+    const [searchFilter, setSearchFilter] = useState<string>(urlSearch || '');
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
         open: false,
         message: '',
@@ -189,6 +200,20 @@ const Consignors: React.FC = () => {
         }
     };
 
+    // Filter consignors based on search
+    const getFilteredConsignors = () => {
+        if (!searchFilter) {
+            return consignors;
+        }
+
+        return consignors.filter(consignor =>
+            consignor.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+            consignor.email?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+            consignor.whatsapp?.includes(searchFilter) ||
+            consignor.id.toLowerCase().includes(searchFilter.toLowerCase())
+        );
+    };
+
     return (
         <Box sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -205,6 +230,25 @@ const Consignors: React.FC = () => {
                 </Button>
             </Box>
 
+            {/* Search Bar */}
+            <Card sx={{ mb: 2 }}>
+                <CardContent>
+                    <TextField
+                        fullWidth
+                        placeholder="Buscar por nome, email, whatsapp ou ID..."
+                        value={searchFilter}
+                        onChange={(e) => setSearchFilter(e.target.value)}
+                        InputProps={{
+                            startAdornment: (
+                                <IconButton edge="start">
+                                    <Search />
+                                </IconButton>
+                            ),
+                        }}
+                    />
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardContent>
                     <TableContainer component={Paper}>
@@ -220,7 +264,7 @@ const Consignors: React.FC = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {consignors.map((consignor) => (
+                                {getFilteredConsignors().map((consignor) => (
                                     <TableRow key={consignor.id}>
                                         <TableCell>
                                             <Typography variant="body2" fontFamily="monospace">

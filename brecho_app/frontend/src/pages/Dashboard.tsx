@@ -107,22 +107,22 @@ const Dashboard: React.FC = () => {
     const [selectedSale, setSelectedSale] = useState<RecentSale | null>(null);
 
     // Action handlers
-    const handleViewAllItems = () => navigate('/itens');
-    const handleViewActiveItems = () => navigate('/itens?filter=active');
-    const handleViewSoldItems = () => navigate('/vendas');
-    const handleViewConsignors = () => navigate('/consignantes');
-    const handleAddNewItem = () => navigate('/itens?action=add');
-    const handleAddNewConsignor = () => navigate('/consignantes?action=add');
-    const handleCreateSale = () => navigate('/vendas?action=add');
+    const handleViewAllItems = () => navigate('/items');
+    const handleViewActiveItems = () => navigate('/items?filter=active');
+    const handleViewSoldItems = () => navigate('/sales');
+    const handleViewConsignors = () => navigate('/consignors');
+    const handleAddNewItem = () => navigate('/items?action=add');
+    const handleAddNewConsignor = () => navigate('/consignors?action=add');
+    const handleCreateSale = () => navigate('/sales?action=add');
     const handleViewReports = () => navigate('/dashboard?view=reports');
 
     const handleSaleAction = (sale: RecentSale, action: string) => {
         switch (action) {
             case 'view':
-                navigate(`/vendas?view=${sale.id}`);
+                navigate(`/sales?view=${sale.id}`);
                 break;
             case 'edit':
-                navigate(`/vendas?edit=${sale.id}`);
+                navigate(`/sales?edit=${sale.id}`);
                 break;
             case 'receipt':
                 // Lógica para gerar recibo
@@ -141,21 +141,19 @@ const Dashboard: React.FC = () => {
     const handleConsignorAction = (consignorName: string, action: string) => {
         switch (action) {
             case 'view':
-                navigate(`/consignantes?search=${encodeURIComponent(consignorName)}`);
+                navigate(`/consignors?search=${encodeURIComponent(consignorName)}`);
                 break;
             case 'items':
-                navigate(`/itens?consignor=${encodeURIComponent(consignorName)}`);
+                navigate(`/items?consignor=${encodeURIComponent(consignorName)}`);
                 break;
             case 'sales':
-                navigate(`/vendas?consignor=${encodeURIComponent(consignorName)}`);
+                navigate(`/sales?consignor=${encodeURIComponent(consignorName)}`);
                 break;
             case 'report':
                 navigate(`/repasses?consignor=${encodeURIComponent(consignorName)}`);
                 break;
         }
-    };
-
-    const fetchDashboardData = async () => {
+    }; const fetchDashboardData = async () => {
         setLoading(true);
         setError(null);
 
@@ -404,7 +402,7 @@ const Dashboard: React.FC = () => {
                                                 sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    navigate('/itens?action=search');
+                                                    navigate('/items?action=search');
                                                 }}
                                             >
                                                 <Search fontSize="small" />
@@ -451,7 +449,7 @@ const Dashboard: React.FC = () => {
                                                 sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    navigate('/itens?filter=active&action=edit');
+                                                    navigate('/items?filter=active&action=edit');
                                                 }}
                                             >
                                                 <Edit fontSize="small" />
@@ -463,7 +461,7 @@ const Dashboard: React.FC = () => {
                                                 sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    navigate('/itens?filter=active&action=archive');
+                                                    navigate('/items?filter=active&action=archive');
                                                 }}
                                             >
                                                 <Archive fontSize="small" />
@@ -522,7 +520,7 @@ const Dashboard: React.FC = () => {
                                                 sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    navigate('/vendas?view=report');
+                                                    navigate('/sales?view=report');
                                                 }}
                                             >
                                                 <Assessment fontSize="small" />
@@ -611,7 +609,7 @@ const Dashboard: React.FC = () => {
                         boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
                     }
                 }}>
-                    <CardActionArea onClick={() => navigate('/vendas?view=revenue-total')}>
+                    <CardActionArea onClick={() => navigate('/sales?view=revenue-total')}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                 <AttachMoney color="success" sx={{ mr: 1 }} />
@@ -627,7 +625,7 @@ const Dashboard: React.FC = () => {
                                         size="small"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            navigate('/vendas?report=revenue');
+                                            navigate('/sales?report=revenue');
                                         }}
                                     >
                                         <Assessment fontSize="small" />
@@ -653,7 +651,7 @@ const Dashboard: React.FC = () => {
                         boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
                     }
                 }}>
-                    <CardActionArea onClick={() => navigate('/vendas?filter=current-month')}>
+                    <CardActionArea onClick={() => navigate('/sales?filter=current-month')}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                 <TrendingUp color="primary" sx={{ mr: 1 }} />
@@ -701,7 +699,7 @@ const Dashboard: React.FC = () => {
                         boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
                     }
                 }}>
-                    <CardActionArea onClick={() => navigate('/vendas?analytics=ticket-medio')}>
+                    <CardActionArea onClick={() => navigate('/sales?analytics=ticket-medio')}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                 <Analytics color="secondary" sx={{ mr: 1 }} />
@@ -757,17 +755,17 @@ const Dashboard: React.FC = () => {
                             </Typography>
                             <Box>
                                 <Tooltip title="Ver todas as vendas">
-                                    <IconButton onClick={() => navigate('/vendas')}>
+                                    <IconButton onClick={() => navigate('/sales')}>
                                         <Visibility />
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Nova venda">
-                                    <IconButton onClick={() => navigate('/vendas?action=add')}>
+                                    <IconButton onClick={() => navigate('/sales?action=add')}>
                                         <Add />
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Filtros avançados">
-                                    <IconButton onClick={() => navigate('/vendas?filters=advanced')}>
+                                    <IconButton onClick={() => navigate('/sales?filters=advanced')}>
                                         <FilterList />
                                     </IconButton>
                                 </Tooltip>
@@ -795,7 +793,7 @@ const Dashboard: React.FC = () => {
                                                     cursor: 'pointer'
                                                 }
                                             }}
-                                            onClick={() => navigate(`/vendas?view=${sale.id}`)}
+                                            onClick={() => navigate(`/sales?view=${sale.id}`)}
                                         >
                                             <TableCell>
                                                 <Chip
@@ -803,7 +801,7 @@ const Dashboard: React.FC = () => {
                                                     size="small"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        navigate(`/itens?search=${sale.sku}`);
+                                                        navigate(`/items?search=${sale.sku}`);
                                                     }}
                                                     sx={{ cursor: 'pointer' }}
                                                 />
@@ -849,7 +847,7 @@ const Dashboard: React.FC = () => {
                                                     <Button
                                                         variant="contained"
                                                         startIcon={<Add />}
-                                                        onClick={() => navigate('/vendas?action=add')}
+                                                        onClick={() => navigate('/sales?action=add')}
                                                     >
                                                         Fazer primeira venda
                                                     </Button>
@@ -873,12 +871,12 @@ const Dashboard: React.FC = () => {
                             </Typography>
                             <Box>
                                 <Tooltip title="Ver todos">
-                                    <IconButton onClick={() => navigate('/consignantes')}>
+                                    <IconButton onClick={() => navigate('/consignors')}>
                                         <People />
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Novo consignante">
-                                    <IconButton onClick={() => navigate('/consignantes?action=add')}>
+                                    <IconButton onClick={() => navigate('/consignors?action=add')}>
                                         <PersonAdd />
                                     </IconButton>
                                 </Tooltip>
@@ -980,7 +978,7 @@ const Dashboard: React.FC = () => {
                                                 <Button
                                                     variant="contained"
                                                     startIcon={<PersonAdd />}
-                                                    onClick={() => navigate('/consignantes?action=add')}
+                                                    onClick={() => navigate('/consignors?action=add')}
                                                 >
                                                     Cadastrar primeiro consignante
                                                 </Button>
