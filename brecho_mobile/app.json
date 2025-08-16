@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Brecho AI Intake",
+    "slug": "brecho-ai-intake",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1976d2"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Este app precisa acessar a câmera para fotografar itens do brechó",
+        "NSMicrophoneUsageDescription": "Este app precisa acessar o microfone para gravar descrições dos itens",
+        "NSPhotoLibraryUsageDescription": "Este app precisa acessar a galeria para salvar fotos dos itens"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1976d2"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir que o app acesse a câmera para fotografar itens",
+          "microphonePermission": "Permitir que o app acesse o microfone para gravar descrições",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Permitir que o app acesse o microfone para gravar áudio"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permitir que o app acesse a galeria para salvar fotos",
+          "savePhotosPermission": "Permitir que o app salve fotos na galeria",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}
