@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Box,
     Typography,
@@ -22,7 +23,16 @@ import {
     TableHead,
     TableRow,
     Alert,
-    Fab
+    Fab,
+    Tooltip,
+    Button,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Menu,
+    MenuItem,
+    CardActionArea
 } from '@mui/material';
 import {
     TrendingUp,
@@ -34,7 +44,19 @@ import {
     Star,
     Schedule,
     Refresh,
-    Analytics
+    Analytics,
+    Add,
+    Edit,
+    Visibility,
+    MoreVert,
+    FilterList,
+    Assessment,
+    Receipt,
+    PersonAdd,
+    ShoppingBag,
+    Search,
+    Delete,
+    Archive
 } from '@mui/icons-material';
 
 interface DashboardStats {
@@ -65,6 +87,7 @@ interface TopConsignor {
 }
 
 const Dashboard: React.FC = () => {
+    const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats>({
         totalItems: 0,
         activeItems: 0,
@@ -79,6 +102,58 @@ const Dashboard: React.FC = () => {
     const [topConsignors, setTopConsignors] = useState<TopConsignor[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [selectedSale, setSelectedSale] = useState<RecentSale | null>(null);
+
+    // Action handlers
+    const handleViewAllItems = () => navigate('/itens');
+    const handleViewActiveItems = () => navigate('/itens?filter=active');
+    const handleViewSoldItems = () => navigate('/vendas');
+    const handleViewConsignors = () => navigate('/consignantes');
+    const handleAddNewItem = () => navigate('/itens?action=add');
+    const handleAddNewConsignor = () => navigate('/consignantes?action=add');
+    const handleCreateSale = () => navigate('/vendas?action=add');
+    const handleViewReports = () => navigate('/dashboard?view=reports');
+
+    const handleSaleAction = (sale: RecentSale, action: string) => {
+        switch (action) {
+            case 'view':
+                navigate(`/vendas?view=${sale.id}`);
+                break;
+            case 'edit':
+                navigate(`/vendas?edit=${sale.id}`);
+                break;
+            case 'receipt':
+                // Lógica para gerar recibo
+                window.open(`/api/v1/sales/${sale.id}/receipt`, '_blank');
+                break;
+            case 'refund':
+                // Lógica para estorno
+                if (window.confirm('Tem certeza que deseja estornar esta venda?')) {
+                    // Implementar estorno
+                }
+                break;
+        }
+        setAnchorEl(null);
+    };
+
+    const handleConsignorAction = (consignorName: string, action: string) => {
+        switch (action) {
+            case 'view':
+                navigate(`/consignantes?search=${encodeURIComponent(consignorName)}`);
+                break;
+            case 'items':
+                navigate(`/itens?consignor=${encodeURIComponent(consignorName)}`);
+                break;
+            case 'sales':
+                navigate(`/vendas?consignor=${encodeURIComponent(consignorName)}`);
+                break;
+            case 'report':
+                navigate(`/repasses?consignor=${encodeURIComponent(consignorName)}`);
+                break;
+        }
+    };
 
     const fetchDashboardData = async () => {
         setLoading(true);
@@ -207,7 +282,7 @@ const Dashboard: React.FC = () => {
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             minHeight: '100vh'
         }}>
-            {/* Header */}
+            {/* Header with Quick Actions */}
             <Box sx={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -225,13 +300,49 @@ const Dashboard: React.FC = () => {
                     <Analytics sx={{ mr: 1, fontSize: 'inherit' }} />
                     Dashboard
                 </Typography>
-                <Fab
-                    color="secondary"
-                    onClick={fetchDashboardData}
-                    disabled={loading}
-                >
-                    <Refresh />
-                </Fab>
+
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Adicionar Item">
+                        <Fab
+                            size="small"
+                            color="secondary"
+                            onClick={handleAddNewItem}
+                        >
+                            <Add />
+                        </Fab>
+                    </Tooltip>
+
+                    <Tooltip title="Nova Venda">
+                        <Fab
+                            size="small"
+                            color="success"
+                            onClick={handleCreateSale}
+                        >
+                            <ShoppingBag />
+                        </Fab>
+                    </Tooltip>
+
+                    <Tooltip title="Novo Consignante">
+                        <Fab
+                            size="small"
+                            color="info"
+                            onClick={handleAddNewConsignor}
+                        >
+                            <PersonAdd />
+                        </Fab>
+                    </Tooltip>
+
+                    <Tooltip title="Atualizar Dados">
+                        <Fab
+                            size="small"
+                            color="primary"
+                            onClick={fetchDashboardData}
+                            disabled={loading}
+                        >
+                            <Refresh />
+                        </Fab>
+                    </Tooltip>
+                </Box>
             </Box>
 
             {error && (
@@ -240,7 +351,7 @@ const Dashboard: React.FC = () => {
                 </Alert>
             )}
 
-            {/* KPIs Grid */}
+            {/* KPIs Grid - Now Clickable */}
             <Box sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr 1fr' },
@@ -250,128 +361,383 @@ const Dashboard: React.FC = () => {
                 <Card sx={{
                     background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
                     color: 'white',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.2)'
+                    }
                 }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
-                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                    {stats.totalItems}
-                                </Typography>
-                                <Typography variant="subtitle1">
-                                    Total de Itens
-                                </Typography>
+                    <CardActionArea onClick={handleViewAllItems}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
+                                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                        {stats.totalItems}
+                                    </Typography>
+                                    <Typography variant="subtitle1">
+                                        Total de Itens
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                        Clique para ver todos
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ textAlign: 'center' }}>
+                                    <Inventory sx={{ fontSize: 48, opacity: 0.7 }} />
+                                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+                                        <Tooltip title="Adicionar Item">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleAddNewItem();
+                                                }}
+                                            >
+                                                <Add fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Buscar Item">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate('/itens?action=search');
+                                                }}
+                                            >
+                                                <Search fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                </Box>
                             </Box>
-                            <Inventory sx={{ fontSize: 48, opacity: 0.7 }} />
-                        </Box>
-                    </CardContent>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
 
                 <Card sx={{
                     background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
                     color: 'white',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.2)'
+                    }
                 }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
-                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                    {stats.activeItems}
-                                </Typography>
-                                <Typography variant="subtitle1">
-                                    Itens Ativos
-                                </Typography>
+                    <CardActionArea onClick={handleViewActiveItems}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
+                                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                        {stats.activeItems}
+                                    </Typography>
+                                    <Typography variant="subtitle1">
+                                        Itens Ativos
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                        Clique para filtrar
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ textAlign: 'center' }}>
+                                    <Star sx={{ fontSize: 48, opacity: 0.7 }} />
+                                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+                                        <Tooltip title="Editar Itens">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate('/itens?filter=active&action=edit');
+                                                }}
+                                            >
+                                                <Edit fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Arquivar Itens">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate('/itens?filter=active&action=archive');
+                                                }}
+                                            >
+                                                <Archive fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                </Box>
                             </Box>
-                            <Star sx={{ fontSize: 48, opacity: 0.7 }} />
-                        </Box>
-                    </CardContent>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
 
                 <Card sx={{
                     background: 'linear-gradient(45deg, #FF9800 30%, #FFC107 90%)',
                     color: 'white',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.2)'
+                    }
                 }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
-                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                    {stats.soldItems}
-                                </Typography>
-                                <Typography variant="subtitle1">
-                                    Itens Vendidos
-                                </Typography>
+                    <CardActionArea onClick={handleViewSoldItems}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
+                                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                        {stats.soldItems}
+                                    </Typography>
+                                    <Typography variant="subtitle1">
+                                        Itens Vendidos
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                        Ver todas as vendas
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ textAlign: 'center' }}>
+                                    <ShoppingCart sx={{ fontSize: 48, opacity: 0.7 }} />
+                                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+                                        <Tooltip title="Nova Venda">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleCreateSale();
+                                                }}
+                                            >
+                                                <Add fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Relatório de Vendas">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate('/vendas?view=report');
+                                                }}
+                                            >
+                                                <Assessment fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                </Box>
                             </Box>
-                            <ShoppingCart sx={{ fontSize: 48, opacity: 0.7 }} />
-                        </Box>
-                    </CardContent>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
 
                 <Card sx={{
                     background: 'linear-gradient(45deg, #9C27B0 30%, #E91E63 90%)',
                     color: 'white',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.2)'
+                    }
                 }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
-                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                    {stats.totalConsignors}
-                                </Typography>
-                                <Typography variant="subtitle1">
-                                    Consignantes
-                                </Typography>
+                    <CardActionArea onClick={handleViewConsignors}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
+                                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                        {stats.totalConsignors}
+                                    </Typography>
+                                    <Typography variant="subtitle1">
+                                        Consignantes
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                        Gerenciar consignantes
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ textAlign: 'center' }}>
+                                    <People sx={{ fontSize: 48, opacity: 0.7 }} />
+                                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+                                        <Tooltip title="Novo Consignante">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleAddNewConsignor();
+                                                }}
+                                            >
+                                                <Add fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Relatório de Repasses">
+                                            <IconButton
+                                                size="small"
+                                                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate('/repasses');
+                                                }}
+                                            >
+                                                <Receipt fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Box>
+                                </Box>
                             </Box>
-                            <People sx={{ fontSize: 48, opacity: 0.7 }} />
-                        </Box>
-                    </CardContent>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
             </Box>
 
-            {/* Revenue Cards */}
+            {/* Revenue Cards - Now with Actions */}
             <Box sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' },
                 gap: 3,
                 mb: 4
             }}>
-                <Card sx={{ boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <AttachMoney color="success" sx={{ mr: 1 }} />
-                            <Typography variant="h6">Receita Total</Typography>
-                        </Box>
-                        <Typography variant="h4" color="success.main" sx={{ fontWeight: 'bold' }}>
-                            {formatCurrency(stats.totalRevenue)}
-                        </Typography>
-                    </CardContent>
+                <Card sx={{
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
+                    }
+                }}>
+                    <CardActionArea onClick={() => navigate('/vendas?view=revenue-total')}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                <AttachMoney color="success" sx={{ mr: 1 }} />
+                                <Typography variant="h6">Receita Total</Typography>
+                                <Box sx={{ flexGrow: 1 }} />
+                                <Tooltip title="Ver detalhes">
+                                    <IconButton size="small">
+                                        <Visibility fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Gerar relatório">
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/vendas?report=revenue');
+                                        }}
+                                    >
+                                        <Assessment fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                            <Typography variant="h4" color="success.main" sx={{ fontWeight: 'bold' }}>
+                                {formatCurrency(stats.totalRevenue)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Clique para ver breakdown detalhado
+                            </Typography>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
 
-                <Card sx={{ boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <TrendingUp color="primary" sx={{ mr: 1 }} />
-                            <Typography variant="h6">Receita do Mês</Typography>
-                        </Box>
-                        <Typography variant="h4" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                            {formatCurrency(stats.monthlyRevenue)}
-                        </Typography>
-                    </CardContent>
+                <Card sx={{
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
+                    }
+                }}>
+                    <CardActionArea onClick={() => navigate('/vendas?filter=current-month')}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                <TrendingUp color="primary" sx={{ mr: 1 }} />
+                                <Typography variant="h6">Receita do Mês</Typography>
+                                <Box sx={{ flexGrow: 1 }} />
+                                <Tooltip title="Comparar com mês anterior">
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/dashboard?compare=monthly');
+                                        }}
+                                    >
+                                        <TrendingUp fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Metas do mês">
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/dashboard?goals=monthly');
+                                        }}
+                                    >
+                                        <Star fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                            <Typography variant="h4" color="primary.main" sx={{ fontWeight: 'bold' }}>
+                                {formatCurrency(stats.monthlyRevenue)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Vendas do mês atual
+                            </Typography>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
 
-                <Card sx={{ boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <Analytics color="secondary" sx={{ mr: 1 }} />
-                            <Typography variant="h6">Ticket Médio</Typography>
-                        </Box>
-                        <Typography variant="h4" color="secondary.main" sx={{ fontWeight: 'bold' }}>
-                            {formatCurrency(stats.averagePrice)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Taxa de conversão: {stats.conversionRate.toFixed(1)}%
-                        </Typography>
-                    </CardContent>
+                <Card sx={{
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
+                    }
+                }}>
+                    <CardActionArea onClick={() => navigate('/vendas?analytics=ticket-medio')}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                <Analytics color="secondary" sx={{ mr: 1 }} />
+                                <Typography variant="h6">Ticket Médio</Typography>
+                                <Box sx={{ flexGrow: 1 }} />
+                                <Tooltip title="Estratégias para aumentar">
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/analytics?focus=ticket-improvement');
+                                        }}
+                                    >
+                                        <TrendingUp fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Análise detalhada">
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/analytics?type=conversion');
+                                        }}
+                                    >
+                                        <Assessment fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                            <Typography variant="h4" color="secondary.main" sx={{ fontWeight: 'bold' }}>
+                                {formatCurrency(stats.averagePrice)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Taxa de conversão: {stats.conversionRate.toFixed(1)}%
+                            </Typography>
+                        </CardContent>
+                    </CardActionArea>
                 </Card>
             </Box>
 
@@ -381,13 +747,32 @@ const Dashboard: React.FC = () => {
                 gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' },
                 gap: 3
             }}>
-                {/* Recent Sales */}
+                {/* Recent Sales - Enhanced with Actions */}
                 <Card sx={{ boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
                     <CardContent>
-                        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                            <Schedule sx={{ mr: 1 }} />
-                            Vendas Recentes
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Schedule sx={{ mr: 1 }} />
+                                Vendas Recentes
+                            </Typography>
+                            <Box>
+                                <Tooltip title="Ver todas as vendas">
+                                    <IconButton onClick={() => navigate('/vendas')}>
+                                        <Visibility />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Nova venda">
+                                    <IconButton onClick={() => navigate('/vendas?action=add')}>
+                                        <Add />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Filtros avançados">
+                                    <IconButton onClick={() => navigate('/vendas?filters=advanced')}>
+                                        <FilterList />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                        </Box>
                         <TableContainer>
                             <Table>
                                 <TableHead>
@@ -397,28 +782,78 @@ const Dashboard: React.FC = () => {
                                         <TableCell>Consignante</TableCell>
                                         <TableCell>Preço</TableCell>
                                         <TableCell>Data</TableCell>
+                                        <TableCell align="center">Ações</TableCell>
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
                                     {recentSales.map((sale) => (
-                                        <TableRow key={sale.id}>
+                                        <TableRow
+                                            key={sale.id}
+                                            sx={{
+                                                '&:hover': {
+                                                    bgcolor: 'action.hover',
+                                                    cursor: 'pointer'
+                                                }
+                                            }}
+                                            onClick={() => navigate(`/vendas?view=${sale.id}`)}
+                                        >
                                             <TableCell>
-                                                <Chip label={sale.sku} size="small" />
+                                                <Chip
+                                                    label={sale.sku}
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigate(`/itens?search=${sale.sku}`);
+                                                    }}
+                                                    sx={{ cursor: 'pointer' }}
+                                                />
                                             </TableCell>
                                             <TableCell>{sale.title}</TableCell>
-                                            <TableCell>{sale.consignor}</TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    variant="text"
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleConsignorAction(sale.consignor, 'view');
+                                                    }}
+                                                >
+                                                    {sale.consignor}
+                                                </Button>
+                                            </TableCell>
                                             <TableCell sx={{ color: 'success.main', fontWeight: 'bold' }}>
                                                 {formatCurrency(sale.sale_price)}
                                             </TableCell>
                                             <TableCell>{formatDate(sale.date)}</TableCell>
+                                            <TableCell align="center">
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedSale(sale);
+                                                        setAnchorEl(e.currentTarget);
+                                                    }}
+                                                >
+                                                    <MoreVert />
+                                                </IconButton>
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                     {recentSales.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={5} align="center">
-                                                <Typography color="text.secondary">
-                                                    Nenhuma venda registrada
-                                                </Typography>
+                                            <TableCell colSpan={6} align="center">
+                                                <Box sx={{ p: 2 }}>
+                                                    <Typography color="text.secondary" gutterBottom>
+                                                        Nenhuma venda registrada
+                                                    </Typography>
+                                                    <Button
+                                                        variant="contained"
+                                                        startIcon={<Add />}
+                                                        onClick={() => navigate('/vendas?action=add')}
+                                                    >
+                                                        Fazer primeira venda
+                                                    </Button>
+                                                </Box>
                                             </TableCell>
                                         </TableRow>
                                     )}
@@ -428,17 +863,45 @@ const Dashboard: React.FC = () => {
                     </CardContent>
                 </Card>
 
-                {/* Top Consignors */}
+                {/* Top Consignors - Enhanced with Actions */}
                 <Card sx={{ boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
                     <CardContent>
-                        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                            <Star sx={{ mr: 1 }} />
-                            Top Consignantes
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Star sx={{ mr: 1 }} />
+                                Top Consignantes
+                            </Typography>
+                            <Box>
+                                <Tooltip title="Ver todos">
+                                    <IconButton onClick={() => navigate('/consignantes')}>
+                                        <People />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Novo consignante">
+                                    <IconButton onClick={() => navigate('/consignantes?action=add')}>
+                                        <PersonAdd />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Relatório de repasses">
+                                    <IconButton onClick={() => navigate('/repasses')}>
+                                        <Receipt />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                        </Box>
                         <List>
                             {topConsignors.map((consignor, index) => (
                                 <React.Fragment key={consignor.name}>
-                                    <ListItem>
+                                    <ListItem
+                                        sx={{
+                                            cursor: 'pointer',
+                                            borderRadius: 1,
+                                            '&:hover': {
+                                                bgcolor: 'action.hover'
+                                            }
+                                        }}
+                                        onClick={() => handleConsignorAction(consignor.name, 'view')}
+                                    >
                                         <ListItemAvatar>
                                             <Avatar sx={{
                                                 bgcolor: index === 0 ? 'gold' :
@@ -449,10 +912,51 @@ const Dashboard: React.FC = () => {
                                             </Avatar>
                                         </ListItemAvatar>
                                         <ListItemText
-                                            primary={consignor.name}
+                                            primary={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <Typography variant="subtitle1" fontWeight="bold">
+                                                        {consignor.name}
+                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                                        <Tooltip title="Ver itens">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleConsignorAction(consignor.name, 'items');
+                                                                }}
+                                                            >
+                                                                <Inventory fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Ver vendas">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleConsignorAction(consignor.name, 'sales');
+                                                                }}
+                                                            >
+                                                                <ShoppingCart fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Gerar repasse">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleConsignorAction(consignor.name, 'report');
+                                                                }}
+                                                            >
+                                                                <Receipt fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </Box>
+                                                </Box>
+                                            }
                                             secondary={
                                                 <Box>
-                                                    <Typography variant="body2">
+                                                    <Typography variant="body2" color="text.secondary">
                                                         {consignor.totalItems} itens • {consignor.totalSales} vendas
                                                     </Typography>
                                                     <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
@@ -468,8 +972,20 @@ const Dashboard: React.FC = () => {
                             {topConsignors.length === 0 && (
                                 <ListItem>
                                     <ListItemText
-                                        primary="Nenhum consignante encontrado"
-                                        secondary="Cadastre consignantes para ver o ranking"
+                                        primary={
+                                            <Box sx={{ textAlign: 'center', p: 2 }}>
+                                                <Typography color="text.secondary" gutterBottom>
+                                                    Nenhum consignante encontrado
+                                                </Typography>
+                                                <Button
+                                                    variant="contained"
+                                                    startIcon={<PersonAdd />}
+                                                    onClick={() => navigate('/consignantes?action=add')}
+                                                >
+                                                    Cadastrar primeiro consignante
+                                                </Button>
+                                            </Box>
+                                        }
                                     />
                                 </ListItem>
                             )}
@@ -477,6 +993,86 @@ const Dashboard: React.FC = () => {
                     </CardContent>
                 </Card>
             </Box>
+
+            {/* Menu de ações para vendas */}
+            <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+            >
+                <MenuItem onClick={() => selectedSale && handleSaleAction(selectedSale, 'view')}>
+                    <Visibility sx={{ mr: 1 }} />
+                    Ver detalhes
+                </MenuItem>
+                <MenuItem onClick={() => selectedSale && handleSaleAction(selectedSale, 'edit')}>
+                    <Edit sx={{ mr: 1 }} />
+                    Editar venda
+                </MenuItem>
+                <MenuItem onClick={() => selectedSale && handleSaleAction(selectedSale, 'receipt')}>
+                    <Receipt sx={{ mr: 1 }} />
+                    Gerar recibo
+                </MenuItem>
+                <Divider />
+                <MenuItem
+                    onClick={() => selectedSale && handleSaleAction(selectedSale, 'refund')}
+                    sx={{ color: 'error.main' }}
+                >
+                    <Delete sx={{ mr: 1 }} />
+                    Estornar venda
+                </MenuItem>
+            </Menu>
+
+            {/* Quick Actions Dialog */}
+            <Dialog open={quickActionsOpen} onClose={() => setQuickActionsOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Ações Rápidas</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+                        <Button
+                            variant="outlined"
+                            startIcon={<Add />}
+                            onClick={() => {
+                                setQuickActionsOpen(false);
+                                handleAddNewItem();
+                            }}
+                        >
+                            Novo Item
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            startIcon={<ShoppingBag />}
+                            onClick={() => {
+                                setQuickActionsOpen(false);
+                                handleCreateSale();
+                            }}
+                        >
+                            Nova Venda
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            startIcon={<PersonAdd />}
+                            onClick={() => {
+                                setQuickActionsOpen(false);
+                                handleAddNewConsignor();
+                            }}
+                        >
+                            Novo Consignante
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            startIcon={<Assessment />}
+                            onClick={() => {
+                                setQuickActionsOpen(false);
+                                handleViewReports();
+                            }}
+                        >
+                            Relatórios
+                        </Button>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setQuickActionsOpen(false)}>Fechar</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
