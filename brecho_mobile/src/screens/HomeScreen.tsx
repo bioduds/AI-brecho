@@ -57,9 +57,9 @@ export default function HomeScreen() {
                             <Text style={styles.featureIconText}>🎤</Text>
                         </View>
                         <View style={styles.featureContent}>
-                            <Text style={styles.featureTitle}>2. Descreva</Text>
+                            <Text style={styles.featureTitle}>2. Descreva (Opcional)</Text>
                             <Text style={styles.featureDescription}>
-                                Grave uma descrição em áudio ou digite observações
+                                Grave uma descrição em áudio se necessário
                             </Text>
                         </View>
                     </View>

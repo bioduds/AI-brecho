@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -10,7 +10,7 @@ import {
     TextInput,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
@@ -28,8 +28,27 @@ export default function AudioScreen() {
     const [isRecording, setIsRecording] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [sound, setSound] = useState<Audio.Sound | null>(null);
-    const [description, setDescription] = useState('');
     const [recordingDuration, setRecordingDuration] = useState(0);
+
+    // Limpar gravação ao sair da tela
+    useFocusEffect(
+        React.useCallback(() => {
+            return () => {
+                // Quando sair da tela, parar gravação se ainda estiver ativa
+                if (isRecording && recording) {
+                    recording.stopAndUnloadAsync().catch(() => { });
+                    setIsRecording(false);
+                    setRecording(null);
+                }
+                // Limpar som se estiver tocando
+                if (sound) {
+                    sound.unloadAsync().catch(() => { });
+                    setSound(null);
+                    setIsPlaying(false);
+                }
+            };
+        }, [isRecording, recording, sound])
+    );
 
     const startRecording = async () => {
         try {
@@ -119,11 +138,36 @@ export default function AudioScreen() {
         setRecordingDuration(0);
     };
 
-    const handleContinue = () => {
+    const handleContinue = async () => {
+        let finalAudioUri = audioUri;
+
+        // Se ainda estiver gravando, parar a gravação automaticamente
+        if (isRecording && recording) {
+            try {
+                setIsRecording(false);
+                clearInterval((recording as any).durationInterval);
+                await recording.stopAndUnloadAsync();
+
+                // Pequeno delay para garantir que o arquivo foi processado
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const uri = recording.getURI();
+                setAudioUri(uri);
+                setRecording(null);
+                finalAudioUri = uri; // Usar o URI recém-criado
+
+                console.log('Áudio gravado e parado com sucesso:', uri);
+            } catch (error) {
+                console.warn('Erro ao parar gravação:', error);
+                // Continuar mesmo com erro
+            }
+        }
+
+        console.log('Navegando para Review com áudio:', finalAudioUri);
         navigation.navigate('Review', {
             photos,
-            audioUri: audioUri || undefined,
-            description: description.trim() || undefined
+            audioUri: finalAudioUri || undefined,
+            description: '' // Removido - sem descrição texto
         });
     };
 
@@ -198,23 +242,6 @@ export default function AudioScreen() {
                             </View>
                         </View>
                     )}
-                </View>
-
-                {/* Text Description */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Descrição Adicional (Opcional)</Text>
-                    <Text style={styles.sectionDescription}>
-                        Adicione observações específicas sobre os itens
-                    </Text>
-                    <TextInput
-                        style={styles.textInput}
-                        placeholder="Ex: Roupas de inverno, tamanho M, marca XYZ..."
-                        multiline
-                        numberOfLines={4}
-                        value={description}
-                        onChangeText={setDescription}
-                        textAlignVertical="top"
-                    />
                 </View>
 
                 {/* Continue Button */}

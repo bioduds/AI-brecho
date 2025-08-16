@@ -47,7 +47,7 @@ fi
 source .venv/bin/activate
 pip install -r requirements.txt > /dev/null 2>&1
 echo "🤖 AI Gateway starting on port 8808..."
-uvicorn server:app --port 8808 > ai_gateway.log 2>&1 &
+uvicorn server:app --host 0.0.0.0 --port 8808 > ai_gateway.log 2>&1 &
 AI_GATEWAY_PID=$!
 cd ..
 
@@ -65,7 +65,7 @@ fi
 source .venv/bin/activate
 pip install -r requirements.txt > /dev/null 2>&1
 echo "🔧 Backend API starting on port 8000..."
-uvicorn main:app --port 8000 > backend.log 2>&1 &
+uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
 BACKEND_PID=$!
 cd ../..
 

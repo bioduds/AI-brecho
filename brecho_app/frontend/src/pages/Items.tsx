@@ -179,17 +179,29 @@ const ItemsPage: React.FC = () => {
         if (!photos) {
             return [];
         }
+
         if (typeof photos === 'string') {
-            // Handle string photos - could be comma-separated or single URL
+            // Handle string photos - could be JSON, comma-separated, base64, or single URL
             try {
-                // Try to parse as JSON first
+                // Try to parse as JSON first (from database)
                 const parsed = JSON.parse(photos);
-                return Array.isArray(parsed) ? parsed : [photos];
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+                // If parsed but not array, treat as single item
+                return [String(parsed)];
             } catch {
-                // If not JSON, treat as comma-separated or single URL
+                // If not JSON, check if it's base64 data
+                if (photos.startsWith('data:') ||
+                    photos.includes('base64,') ||
+                    (photos.length > 100 && /^[A-Za-z0-9+/=]+$/.test(photos))) {
+                    return [photos];
+                }
+                // If not base64, treat as comma-separated or single URL
                 return photos.includes(',') ? photos.split(',').map(p => p.trim()) : [photos];
             }
         }
+
         return Array.isArray(photos) ? photos : [];
     };
 
@@ -198,10 +210,28 @@ const ItemsPage: React.FC = () => {
         if (!photoPath) {
             return DEFAULT_PLACEHOLDER;
         }
+
+        // Check if it's already a data URL (base64)
+        if (photoPath.startsWith('data:')) {
+            return photoPath;
+        }
+
+        // Check if it's base64 without data prefix
+        if (photoPath.includes('base64,') ||
+            (photoPath.length > 100 && /^[A-Za-z0-9+/=]+$/.test(photoPath))) {
+            // If it looks like base64 but doesn't have data prefix, add it
+            if (!photoPath.startsWith('data:')) {
+                return `data:image/jpeg;base64,${photoPath}`;
+            }
+            return photoPath;
+        }
+
+        // Check if it's a full HTTP URL
         if (photoPath.startsWith('http')) {
             return photoPath;
         }
-        // Remove leading slash if present and add base URL
+
+        // Remove leading slash if present and add base URL for file paths
         const cleanPath = photoPath.startsWith('/') ? photoPath.substring(1) : photoPath;
         return `${API_BASE_URL}/${cleanPath}`;
     };

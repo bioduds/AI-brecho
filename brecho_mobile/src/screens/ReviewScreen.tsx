@@ -50,11 +50,10 @@ export default function ReviewScreen() {
         setIsAnalyzing(true);
 
         try {
-            // Call real AI API
+            // Call real AI API - apenas fotos e áudio
             const analysisRequest = {
                 photos,
                 audioUri: audioUri || undefined,
-                description: description || undefined,
             };
 
             const response = await APIService.analyzeItems(analysisRequest);
@@ -93,8 +92,8 @@ export default function ReviewScreen() {
         setIsSending(true);
 
         try {
-            // Send to real API
-            const response = await APIService.createItems(analysisResult.items);
+            // Send to real API with photos
+            const response = await APIService.createItems(analysisResult.items, photos);
 
             if (response.success) {
                 Alert.alert(
@@ -151,21 +150,13 @@ export default function ReviewScreen() {
                 </View>
 
                 {/* Additional Info */}
-                {(audioUri || description) && (
+                {audioUri && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Informações Adicionais</Text>
-                        {audioUri && (
-                            <View style={styles.infoItem}>
-                                <Text style={styles.infoLabel}>🎤 Áudio gravado</Text>
-                                <Text style={styles.infoValue}>Descrição em áudio disponível</Text>
-                            </View>
-                        )}
-                        {description && (
-                            <View style={styles.infoItem}>
-                                <Text style={styles.infoLabel}>📝 Descrição</Text>
-                                <Text style={styles.infoValue}>{description}</Text>
-                            </View>
-                        )}
+                        <View style={styles.infoItem}>
+                            <Text style={styles.infoLabel}>🎤 Áudio gravado</Text>
+                            <Text style={styles.infoValue}>Descrição em áudio disponível</Text>
+                        </View>
                     </View>
                 )}
 
@@ -249,7 +240,6 @@ export default function ReviewScreen() {
                                 <Text style={styles.debugTitle}>📊 Dados enviados para análise:</Text>
                                 <Text style={styles.debugItem}>📸 Fotos: {photos.length}</Text>
                                 {audioUri && <Text style={styles.debugItem}>🎤 Áudio: Sim</Text>}
-                                {description && <Text style={styles.debugItem}>📝 Descrição: "{description}"</Text>}
                             </View>
 
                             <TouchableOpacity style={styles.analyzeButton} onPress={handleAnalyze}>

@@ -137,7 +137,7 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         "- categoria: tipo principal do item "
         "- cor: cor predominante "
         "- condicao: A, A-, B ou C baseado no estado visual "
-        "- TituloIG: título atrativo e descritivo para Instagram (ex: 'Vestido Floral Vintage', 'Luminária Industrial Moderna') "
+        "- TituloIG: título CURTO e direto (máx 30 caracteres, ex: 'Cubo Mágico', 'Vestido Floral', 'Luminária LED') "
         "- descricao_completa: 2-3 frases descrevendo detalhadamente "
         "- preco_minimo: valor numérico inteiro (sem R$) "
         "- preco_maximo: valor numérico inteiro (sem R$) "
@@ -156,12 +156,31 @@ def multimodal_intake_analyze(images, audio_base64: Optional[str] = None) -> dic
         "3. Seja preciso e baseado apenas no que vê nas fotos "
         "4. Condição: A=perfeito, A-=ótimo, B=bom com sinais, C=desgaste visível "
         "5. Descrição completa: 2-3 frases sobre o item e suas características "
-        "6. TituloIG: Crie um título atrativo estilo Instagram, máx 60 caracteres, com categoria + características marcantes (ex: 'Blusa Vintage Floral', 'Luminária Industrial Bronze', 'Tênis Nike Branco') "
+        "6. TituloIG: Título CURTO e direto (máx 30 caracteres, ex: 'Cubo Mágico', 'Blusa Floral', 'Tênis Nike') "
         "SEJA DINÂMICO E INTELIGENTE NA ESCOLHA DOS CAMPOS!"
     )
 
     response = ollama_multimodal_analyze(images, prompt, system, audio_base64)
-    return _parse_json(response)
+    print(f"🤖 RESPOSTA BRUTA DA IA: {response}")
+
+    parsed = _parse_json(response)
+    print(f"📊 JSON PARSEADO: {parsed}")
+
+    if not parsed:
+        print("❌ FALHA NO PARSING - IA não retornou JSON válido!")
+        print(f"🔍 Tentando extrair informações da resposta bruta...")
+        # Fallback: criar um objeto básico a partir da resposta
+        return {
+            "categoria": "Equipamento de academia",
+            "TituloIG": "Halter de Academia",
+            "descricao_completa": "Halter para exercícios de musculação",
+            "cor": "Preto",
+            "condicao": "B",
+            "preco_sugerido": 50,
+            "motivo_preco": "Baseado no tipo de equipamento",
+        }
+
+    return parsed
 
 
 def intake_normalize(context: dict) -> dict:

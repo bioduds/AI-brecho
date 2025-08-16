@@ -54,7 +54,16 @@ def get_items(
 
 
 def create_item(db: Session, item: ItemCreate):
-    db_item = Item(**item.dict())
+    import json
+
+    # Converter dados para dict
+    item_data = item.dict()
+
+    # Converter lista de fotos para JSON string se necessário
+    if item_data.get("photos") and isinstance(item_data["photos"], list):
+        item_data["photos"] = json.dumps(item_data["photos"])
+
+    db_item = Item(**item_data)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
