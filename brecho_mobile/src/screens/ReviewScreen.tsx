@@ -13,8 +13,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
-
-type ReviewScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Review'>;
+import { APIService } from '../services/api'; type ReviewScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Review'>;
 type ReviewScreenRouteProp = RouteProp<RootStackParamList, 'Review'>;
 
 interface AIAnalysisResult {
@@ -51,71 +50,66 @@ export default function ReviewScreen() {
         setIsAnalyzing(true);
 
         try {
-            // Simulate AI analysis (replace with actual API call)
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            // Mock analysis result
-            const mockResult: AIAnalysisResult = {
-                items: [
-                    {
-                        name: 'Camiseta Casual',
-                        category: 'Roupas',
-                        subcategory: 'Camisetas',
-                        brand: 'Marca não identificada',
-                        size: 'M',
-                        color: 'Azul',
-                        condition: 'Bom estado',
-                        estimatedPrice: 25.00,
-                        description: 'Camiseta casual em algodão, cor azul, tamanho médio',
-                        confidence: 0.85,
-                    },
-                    {
-                        name: 'Calça Jeans',
-                        category: 'Roupas',
-                        subcategory: 'Calças',
-                        brand: 'Levi\'s',
-                        size: '38',
-                        color: 'Azul escuro',
-                        condition: 'Muito bom',
-                        estimatedPrice: 80.00,
-                        description: 'Calça jeans escura, marca Levi\'s, tamanho 38',
-                        confidence: 0.92,
-                    },
-                ],
-                suggestions: [
-                    'Considere tirar fotos com melhor iluminação',
-                    'Adicione mais detalhes sobre o estado de conservação',
-                    'Verifique se há etiquetas com informações da marca',
-                ],
+            // Call real AI API
+            const analysisRequest = {
+                photos,
+                audioUri: audioUri || undefined,
+                description: description || undefined,
             };
 
-            setAnalysisResult(mockResult);
+            const response = await APIService.analyzeItems(analysisRequest);
+
+            if (response.success && response.data) {
+                setAnalysisResult(response.data);
+            } else {
+                Alert.alert(
+                    'Erro na Análise da IA',
+                    response.error || 'Não foi possível analisar as imagens. Verifique se o servidor de IA está funcionando e tente novamente.',
+                    [
+                        { text: 'Tentar Novamente', onPress: handleAnalyze },
+                        { text: 'Cancelar', style: 'cancel' }
+                    ]
+                );
+            }
         } catch (error) {
-            Alert.alert('Erro', 'Falha na análise das imagens');
+            Alert.alert(
+                'Erro de Conexão',
+                'Não foi possível conectar com o servidor de IA. Verifique sua conexão de internet e se o servidor está rodando.',
+                [
+                    { text: 'Tentar Novamente', onPress: handleAnalyze },
+                    { text: 'Cancelar', style: 'cancel' }
+                ]
+            );
         } finally {
             setIsAnalyzing(false);
         }
     };
 
     const handleSendToSystem = async () => {
-        if (!analysisResult) return;
+        if (!analysisResult) {
+            return;
+        }
 
         setIsSending(true);
 
         try {
-            // Simulate sending to backend (replace with actual API call)
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Send to real API
+            const response = await APIService.createItems(analysisResult.items);
 
-            Alert.alert(
-                'Sucesso!',
-                `${analysisResult.items.length} item(ns) adicionado(s) ao estoque com sucesso!`,
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.navigate('Home'),
-                    },
-                ]
-            );
+            if (response.success) {
+                Alert.alert(
+                    'Sucesso!',
+                    `${analysisResult.items.length} item(ns) adicionado(s) ao estoque com sucesso!`,
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => navigation.navigate('Home'),
+                        },
+                    ]
+                );
+            } else {
+                Alert.alert('Erro', response.error || 'Falha ao enviar para o sistema');
+            }
         } catch (error) {
             Alert.alert('Erro', 'Falha ao enviar para o sistema');
         } finally {
@@ -245,9 +239,23 @@ export default function ReviewScreen() {
                             )}
                         </View>
                     ) : (
-                        <TouchableOpacity style={styles.analyzeButton} onPress={handleAnalyze}>
-                            <Text style={styles.analyzeButtonText}>Analisar Novamente</Text>
-                        </TouchableOpacity>
+                        <View style={styles.noResultsContainer}>
+                            <Text style={styles.noResultsTitle}>❌ Nenhum item identificado</Text>
+                            <Text style={styles.noResultsMessage}>
+                                A análise da IA não conseguiu identificar nenhum item nas fotos enviadas.
+                            </Text>
+
+                            <View style={styles.debugInfo}>
+                                <Text style={styles.debugTitle}>📊 Dados enviados para análise:</Text>
+                                <Text style={styles.debugItem}>📸 Fotos: {photos.length}</Text>
+                                {audioUri && <Text style={styles.debugItem}>🎤 Áudio: Sim</Text>}
+                                {description && <Text style={styles.debugItem}>📝 Descrição: "{description}"</Text>}
+                            </View>
+
+                            <TouchableOpacity style={styles.analyzeButton} onPress={handleAnalyze}>
+                                <Text style={styles.analyzeButtonText}>Tentar Analisar Novamente</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 
@@ -479,5 +487,44 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         marginLeft: 8,
+    },
+    noResultsContainer: {
+        backgroundColor: 'white',
+        padding: 20,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    noResultsTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#f44336',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    noResultsMessage: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 16,
+        lineHeight: 20,
+    },
+    debugInfo: {
+        backgroundColor: '#f5f5f5',
+        padding: 12,
+        borderRadius: 8,
+        width: '100%',
+        marginBottom: 16,
+    },
+    debugTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 8,
+    },
+    debugItem: {
+        fontSize: 12,
+        color: '#666',
+        marginBottom: 4,
     },
 });

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000'; // Update with your actual API URL
+const API_BASE_URL = 'http://192.168.18.21:8000'; // Update with your actual API URL
 
 export interface APIResponse<T> {
     success: boolean;
@@ -31,37 +31,61 @@ export interface AnalysisResult {
 export class APIService {
     static async analyzeItems(request: AnalysisRequest): Promise<APIResponse<AnalysisResult>> {
         try {
-            const formData = new FormData();
+            // Convert images to base64
+            const images: string[] = [];
+            for (const photoUri of request.photos) {
+                try {
+                    const response = await fetch(photoUri);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    const base64 = await new Promise<string>((resolve) => {
+                        reader.onloadend = () => {
+                            const result = reader.result as string;
+                            // Remove data:image/jpeg;base64, prefix
+                            const base64Data = result.split(',')[1];
+                            resolve(base64Data);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                    images.push(base64);
+                } catch (error) {
+                    console.warn('Failed to convert image to base64:', error);
+                }
+            }
 
-            // Add photos
-            request.photos.forEach((photoUri, index) => {
-                formData.append('photos', {
-                    uri: photoUri,
-                    type: 'image/jpeg',
-                    name: `photo_${index}.jpg`,
-                } as any);
-            });
-
-            // Add audio if available
+            // Convert audio to base64 if available
+            let audioBase64: string | undefined;
             if (request.audioUri) {
-                formData.append('audio', {
-                    uri: request.audioUri,
-                    type: 'audio/m4a',
-                    name: 'audio.m4a',
-                } as any);
+                try {
+                    const response = await fetch(request.audioUri);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    audioBase64 = await new Promise<string>((resolve) => {
+                        reader.onloadend = () => {
+                            const result = reader.result as string;
+                            // Remove data:audio/m4a;base64, prefix
+                            const base64Data = result.split(',')[1];
+                            resolve(base64Data);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (error) {
+                    console.warn('Failed to convert audio to base64:', error);
+                }
             }
 
-            // Add description if available
-            if (request.description) {
-                formData.append('description', request.description);
-            }
+            const requestBody = {
+                images,
+                audio: audioBase64,
+                description: request.description
+            };
 
-            const response = await fetch(`${API_BASE_URL}/ai/analyze`, {
+            const response = await fetch(`${API_BASE_URL}/api/v1/ai/intake`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'multipart/form-data',
+                    'Content-Type': 'application/json',
                 },
-                body: formData,
+                body: JSON.stringify(requestBody),
             });
 
             const data = await response.json();
@@ -69,13 +93,19 @@ export class APIService {
             if (!response.ok) {
                 return {
                     success: false,
-                    error: data.detail || 'Failed to analyze items',
+                    error: data.detail || data.message || 'Failed to analyze items',
                 };
             }
 
+            // Transform the response to match our interface
+            const result: AnalysisResult = {
+                items: data.proposal?.items || [],
+                suggestions: data.proposal?.suggestions || []
+            };
+
             return {
                 success: true,
-                data,
+                data: result,
             };
         } catch (error) {
             return {
