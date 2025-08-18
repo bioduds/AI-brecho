@@ -12,6 +12,9 @@ from models import Base
 from schemas import *
 from ai_services import ai_service, qr_service
 
+# Import audit routes
+from routes.auth_audit import router as auth_audit_router
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -30,6 +33,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include audit routes
+app.include_router(auth_audit_router)
 
 security = HTTPBearer()
 

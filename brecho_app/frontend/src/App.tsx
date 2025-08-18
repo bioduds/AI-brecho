@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Consignors from './pages/Consignors';
@@ -47,17 +49,21 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/consignors" element={<Consignors />} />
-            <Route path="/items" element={<Items />} />
-            <Route path="/ai-intake" element={<AIIntake />} />
-            <Route path="/sales" element={<Sales />} />
-          </Routes>
-        </Layout>
-      </Router>
+      <AuthProvider>
+        <Router basename="/brecho">
+          <ProtectedRoute>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/consignors" element={<Consignors />} />
+                <Route path="/items" element={<Items />} />
+                <Route path="/ai-intake" element={<AIIntake />} />
+                <Route path="/sales" element={<Sales />} />
+              </Routes>
+            </Layout>
+          </ProtectedRoute>
+        </Router>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

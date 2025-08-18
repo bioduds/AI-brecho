@@ -66,12 +66,35 @@ import {
     StarBorder,
     GridView,
     TableRows,
+    HttpsOutlined,
+    LockOutlined,
+    SecurityOutlined,
+    VerifiedUserOutlined,
 } from '@mui/icons-material';
 import api from '../services/api';
 
 // Placeholder image for items without photos
 const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/200x200?text=Sem+Foto';
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+// Dynamic API base URL configuration for production/development
+const getApiBaseUrl = (): string => {
+    // If explicitly set via environment variable, use it
+    if (process.env.REACT_APP_API_URL) {
+        return process.env.REACT_APP_API_URL;
+    }
+
+    // In production build, use same protocol as current page
+    if (process.env.NODE_ENV === 'production') {
+        const { protocol, hostname } = window.location;
+        const port = hostname === 'localhost' ? ':8000' : '';
+        return `${protocol}//${hostname}${port}`;
+    }
+
+    // Development fallback
+    return 'http://localhost:8000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Interfaces simplificadas
 interface Item {
@@ -140,6 +163,12 @@ const ItemsPage: React.FC = () => {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [addModalOpen, setAddModalOpen] = useState(urlAction === 'add');
 
+    // Estados para modal de edição
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<Item | null>(null);
+    const [editFormData, setEditFormData] = useState<Partial<Item>>({});
+    const [editLoading, setEditLoading] = useState(false);
+
     // Menu de ações
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -172,74 +201,176 @@ const ItemsPage: React.FC = () => {
 
     useEffect(() => {
         fetchItems();
+
+        // Test base64 image support in current environment
+        console.log('🧪 Testing base64 image support:', {
+            environment: process.env.NODE_ENV,
+            hostname: window.location.hostname,
+            userAgent: navigator.userAgent
+        });
+
+        // Create a small test base64 image (1x1 red pixel)
+        const testBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+        const testImg = new Image();
+        testImg.onload = () => {
+            console.log('✅ Base64 image support confirmed');
+        };
+        testImg.onerror = (err) => {
+            console.error('❌ Base64 image support failed:', err);
+        };
+        testImg.src = testBase64;
     }, []);
 
     // Helper function to normalize photos
     const normalizePhotos = (photos?: string[] | string): string[] => {
+        console.log('🔍 normalizePhotos input:', photos);
+
         if (!photos) {
+            console.log('🔍 normalizePhotos: No photos provided');
             return [];
         }
-
         if (typeof photos === 'string') {
-            // Handle string photos - could be JSON, comma-separated, base64, or single URL
+            // Handle string photos - could be comma-separated or single URL
             try {
-                // Try to parse as JSON first (from database)
+                // Try to parse as JSON first
                 const parsed = JSON.parse(photos);
-                if (Array.isArray(parsed)) {
-                    return parsed;
-                }
-                // If parsed but not array, treat as single item
-                return [String(parsed)];
+                console.log('🔍 normalizePhotos: Parsed JSON:', parsed);
+                return Array.isArray(parsed) ? parsed : [photos];
             } catch {
-                // If not JSON, check if it's base64 data
-                if (photos.startsWith('data:') ||
-                    photos.includes('base64,') ||
-                    (photos.length > 100 && /^[A-Za-z0-9+/=]+$/.test(photos))) {
-                    return [photos];
-                }
-                // If not base64, treat as comma-separated or single URL
-                return photos.includes(',') ? photos.split(',').map(p => p.trim()) : [photos];
+                // If not JSON, treat as comma-separated or single URL
+                const result = photos.includes(',') ? photos.split(',').map(p => p.trim()) : [photos];
+                console.log('🔍 normalizePhotos: Fallback result:', result);
+                return result;
             }
         }
 
-        return Array.isArray(photos) ? photos : [];
+        const result = Array.isArray(photos) ? photos : [];
+        console.log('🔍 normalizePhotos: Array result:', result);
+        return result;
+    };
+
+    // Helper function to convert base64 to blob URL (for iPhone photos in production)
+    const base64ToBlobUrl = (base64String: string): string => {
+        try {
+            console.log('🔄 Converting base64 to blob URL...');
+
+            // Extract the content type and data from base64 string
+            const [header, data] = base64String.split(',');
+            if (!header || !data) {
+                throw new Error('Invalid base64 format');
+            }
+
+            const mimeMatch = header.match(/data:([^;]+);base64/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+            console.log('🔄 Base64 conversion details:', {
+                headerLength: header.length,
+                dataLength: data.length,
+                mimeType,
+                totalSize: base64String.length
+            });
+
+            // Convert base64 to binary
+            const binaryString = window.atob(data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Create blob and return blob URL
+            const blob = new Blob([bytes], { type: mimeType });
+            const blobUrl = URL.createObjectURL(blob);
+
+            console.log('✅ Base64 converted to blob URL successfully:', {
+                originalLength: base64String.length,
+                blobSize: blob.size,
+                mimeType,
+                blobUrl: blobUrl.substring(0, 50) + '...'
+            });
+
+            // Store blob URL for cleanup later (optional enhancement)
+            // Note: In a real app, you'd want to clean these up when components unmount
+
+            return blobUrl;
+        } catch (error) {
+            console.error('❌ Failed to convert base64 to blob URL:', {
+                error: error instanceof Error ? error.message : String(error),
+                base64Length: base64String.length,
+                base64Start: base64String.substring(0, 100)
+            });
+
+            // Return original base64 as fallback
+            return base64String;
+        }
     };
 
     // Helper function to get full image URL
     const getImageUrl = (photoPath: string): string => {
         if (!photoPath) {
+            console.log('🔍 getImageUrl: No photo path provided');
             return DEFAULT_PLACEHOLDER;
         }
 
-        // Check if it's already a data URL (base64)
-        if (photoPath.startsWith('data:')) {
-            return photoPath;
-        }
+        // Check if it's a base64 image
+        if (photoPath.startsWith('data:image/')) {
+            const isProduction = window.location.hostname !== 'localhost';
+            const photoSizeMB = (photoPath.length * 0.75) / (1024 * 1024); // Approximate size in MB
 
-        // Check if it's base64 without data prefix
-        if (photoPath.includes('base64,') ||
-            (photoPath.length > 100 && /^[A-Za-z0-9+/=]+$/.test(photoPath))) {
-            // If it looks like base64 but doesn't have data prefix, add it
-            if (!photoPath.startsWith('data:')) {
-                return `data:image/jpeg;base64,${photoPath}`;
+            console.log('🔍 getImageUrl: Base64 image detected', {
+                environment: process.env.NODE_ENV,
+                apiUrl: process.env.REACT_APP_API_URL,
+                isProduction,
+                hostname: window.location.hostname,
+                photoLength: photoPath.length,
+                photoSizeMB: photoSizeMB.toFixed(2),
+                photoStart: photoPath.substring(0, 50),
+                willConvertToBlob: isProduction && photoPath.length > 100000 // 100KB threshold
+            });
+
+            // In production, convert large base64 images to blob URLs for better performance
+            // iPhone photos are typically very large and cause issues with base64 in production
+            if (isProduction && photoPath.length > 100000) { // 100KB threshold for iPhone photos
+                console.log('🔄 Converting large base64 to blob URL (likely iPhone photo)');
+                try {
+                    const blobUrl = base64ToBlobUrl(photoPath);
+                    console.log('✅ Successfully converted to blob URL:', blobUrl);
+                    return blobUrl;
+                } catch (error) {
+                    console.error('❌ Blob URL conversion failed, using original base64:', error);
+                    return photoPath;
+                }
             }
+
+            console.log('🔍 Using base64 directly (development or small image)');
             return photoPath;
         }
 
-        // Check if it's a full HTTP URL
         if (photoPath.startsWith('http')) {
+            console.log('🔍 getImageUrl: Using absolute URL:', photoPath);
             return photoPath;
         }
 
-        // Remove leading slash if present and add base URL for file paths
+        // Remove leading slash if present and add base URL
         const cleanPath = photoPath.startsWith('/') ? photoPath.substring(1) : photoPath;
-        return `${API_BASE_URL}/${cleanPath}`;
+        const fullUrl = `${API_BASE_URL}/${cleanPath}`;
+        console.log('🔍 getImageUrl: Constructed URL:', fullUrl);
+        console.log('🔍 getImageUrl: API_BASE_URL is:', API_BASE_URL);
+        console.log('🔍 getImageUrl: process.env.REACT_APP_API_URL is:', process.env.REACT_APP_API_URL);
+        return fullUrl;
     };
 
     // Helper function to get normalized photos with full URLs
     const getNormalizedPhotosWithUrls = (photos?: string[] | string): string[] => {
         const normalizedPhotos = normalizePhotos(photos);
-        return normalizedPhotos.map(photo => getImageUrl(photo));
+        const result = normalizedPhotos.map(photo => getImageUrl(photo));
+        console.log('🔍 getNormalizedPhotosWithUrls result:', result);
+
+        // Debug específico para cubo mágico
+        if (result.some(url => url.includes('base64') || url.includes('data:'))) {
+            console.log('🎲 CUBO MÁGICO - Photos processadas:', { photos, normalizedPhotos, result });
+        }
+
+        return result;
     };
 
     // Helper function to get item display title
@@ -261,6 +392,35 @@ const ItemsPage: React.FC = () => {
             return item.status;
         }
         return 'disponivel';
+    };
+
+    // Helper function to check if URL is secure (HTTPS)
+    const isSecureUrl = (url: string): boolean => {
+        // Base64 data URLs are considered secure
+        if (url.startsWith('data:')) {
+            return true;
+        }
+
+        // HTTPS URLs are secure
+        if (url.startsWith('https://')) {
+            return true;
+        }
+
+        // Localhost HTTP is considered acceptable for development
+        if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+            return process.env.NODE_ENV === 'development';
+        }
+
+        // All other HTTP URLs are not secure
+        return false;
+    };
+
+    // Helper component for security icon
+    const SecurityIcon = ({ url }: { url: string }) => {
+        if (isSecureUrl(url)) {
+            return <HttpsOutlined sx={{ fontSize: 16, color: 'success.main' }} />;
+        }
+        return <LockOutlined sx={{ fontSize: 16, color: 'warning.main' }} />;
     };
 
     // Filtrar itens
@@ -312,11 +472,75 @@ const ItemsPage: React.FC = () => {
     };
 
     const handleEditItem = (item: Item) => {
-        // For now, just show an alert - you can implement full edit functionality later
-        alert(`Editar item: ${getItemTitle(item)} (SKU: ${item.sku})`);
+        console.log('✏️ Abrindo modal de edição para item:', item.sku);
+        setEditingItem(item);
+        setEditFormData({
+            name: item.name || '',
+            title_ig: item.title_ig || '',
+            brand: item.brand || '',
+            category: item.category || '',
+            subcategory: item.subcategory || '',
+            condition: item.condition || '',
+            size: item.size || '',
+            color: item.color || '',
+            fabric: item.fabric || '',
+            gender: item.gender || '',
+            fit: item.fit || '',
+            acquisition_type: item.acquisition_type || '',
+            list_price: item.list_price || 0,
+            cost: item.cost || 0,
+            price: item.price || 0,
+            location: item.location || '',
+            description: item.description || '',
+            flaws: item.flaws || '',
+            bust: item.bust || 0,
+            waist: item.waist || 0,
+            length: item.length || 0,
+            active: item.active !== false
+        });
+        setEditModalOpen(true);
     };
 
-    const handleDeleteItem = (item: Item) => {
+    const handleCloseEditModal = () => {
+        setEditModalOpen(false);
+        setEditingItem(null);
+        setEditFormData({});
+        setEditLoading(false);
+    };
+
+    const handleEditFormChange = (field: keyof Item, value: any) => {
+        setEditFormData(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingItem) return;
+
+        setEditLoading(true);
+        try {
+            console.log('💾 Salvando edições para item:', editingItem.sku, editFormData);
+
+            // Use PATCH method with SKU as the endpoint expects
+            const response = await api.patch(`/items/${editingItem.sku}`, editFormData);
+
+            console.log('✅ Item editado com sucesso:', response.data);
+
+            // Atualizar a lista de itens
+            await fetchItems();
+
+            // Fechar modal
+            handleCloseEditModal();
+
+            setError(null);
+        } catch (error) {
+            console.error('❌ Erro ao editar item:', error);
+            setError('Erro ao salvar edições. Tente novamente.');
+        } finally {
+            setEditLoading(false);
+        }
+    }; const handleDeleteItem = (item: Item) => {
         setSelectedItem(item);
         setDeleteModalOpen(true);
     };
@@ -362,7 +586,19 @@ const ItemsPage: React.FC = () => {
         onClick?: () => void;
         showBadge?: boolean;
     }> = ({ photos, alt, size = 48, onClick, showBadge = true }) => {
+        // Debug específico para cubo mágico
+        if (alt.toLowerCase().includes('cubo') || (photos && photos.some(p => p.includes('data:image/')))) {
+            console.log('🎲 PhotoDisplay - CUBO MÁGICO:', {
+                alt,
+                photos,
+                photosLength: photos?.length,
+                firstPhoto: photos?.[0],
+                isBase64: photos?.[0]?.startsWith('data:image/')
+            });
+        }
+
         if (!photos || photos.length === 0) {
+            console.log('📷 PhotoDisplay - No photos:', { alt, photos });
             return (
                 <Avatar
                     sx={{
@@ -378,9 +614,12 @@ const ItemsPage: React.FC = () => {
             );
         }
 
+        const photoSrc = photos[0] || DEFAULT_PLACEHOLDER;
+        console.log('📷 PhotoDisplay - Renderizing:', { alt, photoSrc: photoSrc.substring(0, 100) + '...' });
+
         const photo = (
             <Avatar
-                src={photos[0] || DEFAULT_PLACEHOLDER}
+                src={photoSrc}
                 alt={alt}
                 sx={{
                     width: size,
@@ -393,6 +632,36 @@ const ItemsPage: React.FC = () => {
                     } : {}
                 }}
                 onClick={onClick}
+                onError={(e) => {
+                    console.error('🚨 PhotoDisplay - Image load error:', {
+                        alt,
+                        src: photoSrc.substring(0, 100) + '...',
+                        error: e,
+                        isBase64: photoSrc.startsWith('data:image/'),
+                        environment: process.env.NODE_ENV,
+                        hostname: window.location.hostname,
+                        userAgent: navigator.userAgent
+                    });
+
+                    // Try to create a test image to check if base64 works
+                    if (photoSrc.startsWith('data:image/')) {
+                        const testImg = new Image();
+                        testImg.onload = () => {
+                            console.log('✅ Base64 test image loaded successfully');
+                        };
+                        testImg.onerror = (err) => {
+                            console.error('❌ Base64 test image failed:', err);
+                        };
+                        testImg.src = photoSrc;
+                    }
+                }}
+                onLoad={() => {
+                    console.log('✅ PhotoDisplay - Image loaded successfully:', {
+                        alt,
+                        src: photoSrc.substring(0, 100) + '...',
+                        isBase64: photoSrc.startsWith('data:image/')
+                    });
+                }}
             >
                 <PhotoLibrary />
             </Avatar>
@@ -522,6 +791,12 @@ const ItemsPage: React.FC = () => {
                                 <AttachMoney fontSize="small" />
                                 <Typography variant="body2">
                                     R$ {filteredItems.reduce((acc, item) => acc + getItemPrice(item), 0).toFixed(2)}
+                                </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <SecurityIcon url={API_BASE_URL} />
+                                <Typography variant="body2">
+                                    {isSecureUrl(API_BASE_URL) ? 'Conexão Segura' : 'Conexão Insegura'}
                                 </Typography>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -675,96 +950,108 @@ const ItemsPage: React.FC = () => {
                             <TableBody>
                                 {filteredItems
                                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                    .map((item) => (
-                                        <TableRow
-                                            key={item.sku}
-                                            hover
-                                            sx={{
-                                                '&:hover': { bgcolor: 'action.hover' },
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            <TableCell onClick={() => handleViewItem(item)}>
-                                                <PhotoDisplay
-                                                    photos={getNormalizedPhotosWithUrls(item.photos)}
-                                                    alt={getItemTitle(item)}
-                                                    onClick={() => handleImageClick(getNormalizedPhotosWithUrls(item.photos))}
-                                                />
-                                            </TableCell>
+                                    .map((item) => {
+                                        // Debug específico para cubo mágico
+                                        if (item.sku === 'MOB-1755373843444-1IEKJ' || getItemTitle(item).toLowerCase().includes('cubo')) {
+                                            console.log('🎲 RENDERIZANDO CUBO MÁGICO:', {
+                                                sku: item.sku,
+                                                title: getItemTitle(item),
+                                                photos: item.photos,
+                                                normalizedPhotos: getNormalizedPhotosWithUrls(item.photos)
+                                            });
+                                        }
 
-                                            <TableCell onClick={() => handleViewItem(item)}>
-                                                <Box>
-                                                    <Typography variant="body1" fontWeight="medium" sx={{ mb: 0.5 }}>
-                                                        {getItemTitle(item)}
-                                                    </Typography>
-                                                    <Stack direction="row" spacing={1} flexWrap="wrap">
-                                                        {item.brand && (
-                                                            <Typography variant="caption" color="text.secondary">
-                                                                {item.brand}
-                                                            </Typography>
-                                                        )}
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            SKU: {item.sku}
+                                        return (
+                                            <TableRow
+                                                key={item.sku}
+                                                hover
+                                                sx={{
+                                                    '&:hover': { bgcolor: 'action.hover' },
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                <TableCell onClick={() => handleViewItem(item)}>
+                                                    <PhotoDisplay
+                                                        photos={getNormalizedPhotosWithUrls(item.photos)}
+                                                        alt={getItemTitle(item)}
+                                                        onClick={() => handleImageClick(getNormalizedPhotosWithUrls(item.photos))}
+                                                    />
+                                                </TableCell>
+
+                                                <TableCell onClick={() => handleViewItem(item)}>
+                                                    <Box>
+                                                        <Typography variant="body1" fontWeight="medium" sx={{ mb: 0.5 }}>
+                                                            {getItemTitle(item)}
                                                         </Typography>
-                                                        {item.category && (
+                                                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                                                            {item.brand && (
+                                                                <Typography variant="caption" color="text.secondary">
+                                                                    {item.brand}
+                                                                </Typography>
+                                                            )}
                                                             <Typography variant="caption" color="text.secondary">
-                                                                • {item.category}
+                                                                SKU: {item.sku}
                                                             </Typography>
-                                                        )}
+                                                            {item.category && (
+                                                                <Typography variant="caption" color="text.secondary">
+                                                                    • {item.category}
+                                                                </Typography>
+                                                            )}
+                                                        </Stack>
+                                                    </Box>
+                                                </TableCell>
+
+                                                <TableCell>
+                                                    <ConditionChip condition={item.condition} />
+                                                </TableCell>
+
+                                                <TableCell align="right">
+                                                    <Typography variant="body1" fontWeight="bold" color="primary">
+                                                        R$ {getItemPrice(item).toFixed(2)}
+                                                    </Typography>
+                                                </TableCell>
+
+                                                <TableCell align="center">
+                                                    <Stack direction="row" spacing={0.5} justifyContent="center">
+                                                        <Tooltip title="Visualizar">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleViewItem(item);
+                                                                }}
+                                                            >
+                                                                <Visibility fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Editar">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEditItem(item);
+                                                                }}
+                                                            >
+                                                                <Edit fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Arquivar">
+                                                            <IconButton
+                                                                size="small"
+                                                                color="error"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item);
+                                                                }}
+                                                            >
+                                                                <Delete fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
                                                     </Stack>
-                                                </Box>
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <ConditionChip condition={item.condition} />
-                                            </TableCell>
-
-                                            <TableCell align="right">
-                                                <Typography variant="body1" fontWeight="bold" color="primary">
-                                                    R$ {getItemPrice(item).toFixed(2)}
-                                                </Typography>
-                                            </TableCell>
-
-                                            <TableCell align="center">
-                                                <Stack direction="row" spacing={0.5} justifyContent="center">
-                                                    <Tooltip title="Visualizar">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleViewItem(item);
-                                                            }}
-                                                        >
-                                                            <Visibility fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Editar">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleEditItem(item);
-                                                            }}
-                                                        >
-                                                            <Edit fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Arquivar">
-                                                        <IconButton
-                                                            size="small"
-                                                            color="error"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteItem(item);
-                                                            }}
-                                                        >
-                                                            <Delete fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </Stack>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                             </TableBody>
                         </Table>
                     </TableContainer>
@@ -828,6 +1115,16 @@ const ItemsPage: React.FC = () => {
                                         }}
                                         onClick={() => handleImageClick(getNormalizedPhotosWithUrls(item.photos))}
                                     >
+                                        {(() => {
+                                            // Debug logging for magic cube
+                                            if (item.sku === 'MOB-1755373843444-1IEKJ') {
+                                                console.log('🎯 Magic cube item photos:', item.photos);
+                                                const normalizedPhotos = getNormalizedPhotosWithUrls(item.photos);
+                                                console.log('🎯 Magic cube normalized photos:', normalizedPhotos);
+                                                console.log('🎯 Magic cube first photo URL:', normalizedPhotos[0]);
+                                            }
+                                            return null;
+                                        })()}
                                         {getNormalizedPhotosWithUrls(item.photos).length > 0 ? (
                                             <Box
                                                 component="img"
@@ -842,6 +1139,10 @@ const ItemsPage: React.FC = () => {
                                                 }}
                                                 onError={(e) => {
                                                     const target = e.target as HTMLImageElement;
+                                                    console.log('❌ Image load error for URL:', target.src);
+                                                    if (item.sku === 'MOB-1755373843444-1IEKJ') {
+                                                        console.log('❌ Magic cube image failed to load:', target.src);
+                                                    }
                                                     target.style.display = 'none';
                                                     if (target.parentElement) {
                                                         target.parentElement.innerHTML = `
@@ -1041,7 +1342,12 @@ const ItemsPage: React.FC = () => {
                                             Fotos do Produto
                                         </Typography>
 
-                                        {selectedItem && getNormalizedPhotosWithUrls(selectedItem.photos).length > 0 ? (
+                                        {selectedItem && (() => {
+                                            const photos = getNormalizedPhotosWithUrls(selectedItem.photos);
+                                            console.log('Debug - Selected item photos:', selectedItem.photos);
+                                            console.log('Debug - Normalized photos with URLs:', photos);
+                                            return photos.length > 0;
+                                        })() ? (
                                             <Box>
                                                 <Box
                                                     component="img"
@@ -1558,6 +1864,303 @@ const ItemsPage: React.FC = () => {
                         disabled={loading}
                     >
                         {loading ? 'Arquivando...' : 'Arquivar Item'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Modal de Edição de Item */}
+            <Dialog
+                open={editModalOpen}
+                onClose={handleCloseEditModal}
+                maxWidth="md"
+                fullWidth
+                scroll="paper"
+            >
+                <DialogTitle>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                        <Edit color="primary" />
+                        <Typography variant="h6">
+                            Editar Item
+                        </Typography>
+                        {editingItem && (
+                            <Chip
+                                label={editingItem.sku}
+                                variant="outlined"
+                                size="small"
+                            />
+                        )}
+                    </Stack>
+                </DialogTitle>
+
+                <DialogContent dividers>
+                    {editingItem && (
+                        <Stack spacing={3}>
+                            {/* Informações Básicas */}
+                            <Box>
+                                <Typography variant="h6" gutterBottom color="primary">
+                                    Informações Básicas
+                                </Typography>
+                                <Stack spacing={2}>
+                                    <TextField
+                                        label="Nome do Item"
+                                        value={editFormData.name || ''}
+                                        onChange={(e) => handleEditFormChange('name', e.target.value)}
+                                        fullWidth
+                                        variant="outlined"
+                                    />
+                                    <TextField
+                                        label="Título Instagram"
+                                        value={editFormData.title_ig || ''}
+                                        onChange={(e) => handleEditFormChange('title_ig', e.target.value)}
+                                        fullWidth
+                                        variant="outlined"
+                                        helperText="Título usado para posts no Instagram"
+                                    />
+                                    <Stack direction="row" spacing={2}>
+                                        <TextField
+                                            label="Marca"
+                                            value={editFormData.brand || ''}
+                                            onChange={(e) => handleEditFormChange('brand', e.target.value)}
+                                            fullWidth
+                                            variant="outlined"
+                                        />
+                                        <FormControl fullWidth>
+                                            <InputLabel>Condição</InputLabel>
+                                            <Select
+                                                value={editFormData.condition || ''}
+                                                label="Condição"
+                                                onChange={(e) => handleEditFormChange('condition', e.target.value)}
+                                            >
+                                                <MenuItem value="novo">Novo</MenuItem>
+                                                <MenuItem value="semi-novo">Semi-novo</MenuItem>
+                                                <MenuItem value="usado">Usado</MenuItem>
+                                                <MenuItem value="vintage">Vintage</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </Stack>
+                                </Stack>
+                            </Box>
+
+                            {/* Categoria e Características */}
+                            <Box>
+                                <Typography variant="h6" gutterBottom color="primary">
+                                    Categoria e Características
+                                </Typography>
+                                <Stack spacing={2}>
+                                    <Stack direction="row" spacing={2}>
+                                        <TextField
+                                            label="Categoria"
+                                            value={editFormData.category || ''}
+                                            onChange={(e) => handleEditFormChange('category', e.target.value)}
+                                            fullWidth
+                                            variant="outlined"
+                                        />
+                                        <TextField
+                                            label="Subcategoria"
+                                            value={editFormData.subcategory || ''}
+                                            onChange={(e) => handleEditFormChange('subcategory', e.target.value)}
+                                            fullWidth
+                                            variant="outlined"
+                                        />
+                                    </Stack>
+                                    <Stack direction="row" spacing={2}>
+                                        <TextField
+                                            label="Tamanho"
+                                            value={editFormData.size || ''}
+                                            onChange={(e) => handleEditFormChange('size', e.target.value)}
+                                            variant="outlined"
+                                        />
+                                        <TextField
+                                            label="Cor"
+                                            value={editFormData.color || ''}
+                                            onChange={(e) => handleEditFormChange('color', e.target.value)}
+                                            variant="outlined"
+                                        />
+                                        <TextField
+                                            label="Tecido"
+                                            value={editFormData.fabric || ''}
+                                            onChange={(e) => handleEditFormChange('fabric', e.target.value)}
+                                            variant="outlined"
+                                        />
+                                    </Stack>
+                                    <Stack direction="row" spacing={2}>
+                                        <FormControl variant="outlined">
+                                            <InputLabel>Gênero</InputLabel>
+                                            <Select
+                                                value={editFormData.gender || ''}
+                                                label="Gênero"
+                                                onChange={(e) => handleEditFormChange('gender', e.target.value)}
+                                            >
+                                                <MenuItem value="feminino">Feminino</MenuItem>
+                                                <MenuItem value="masculino">Masculino</MenuItem>
+                                                <MenuItem value="unissex">Unissex</MenuItem>
+                                                <MenuItem value="infantil">Infantil</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                        <TextField
+                                            label="Modelagem"
+                                            value={editFormData.fit || ''}
+                                            onChange={(e) => handleEditFormChange('fit', e.target.value)}
+                                            variant="outlined"
+                                        />
+                                        <FormControl variant="outlined">
+                                            <InputLabel>Tipo de Aquisição</InputLabel>
+                                            <Select
+                                                value={editFormData.acquisition_type || ''}
+                                                label="Tipo de Aquisição"
+                                                onChange={(e) => handleEditFormChange('acquisition_type', e.target.value)}
+                                            >
+                                                <MenuItem value="consignacao">Consignação</MenuItem>
+                                                <MenuItem value="compra">Compra</MenuItem>
+                                                <MenuItem value="doacao">Doação</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </Stack>
+                                </Stack>
+                            </Box>
+
+                            {/* Preços */}
+                            <Box>
+                                <Typography variant="h6" gutterBottom color="primary">
+                                    Preços
+                                </Typography>
+                                <Stack direction="row" spacing={2}>
+                                    <TextField
+                                        label="Preço de Lista"
+                                        type="number"
+                                        value={editFormData.list_price || ''}
+                                        onChange={(e) => handleEditFormChange('list_price', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Custo"
+                                        type="number"
+                                        value={editFormData.cost || ''}
+                                        onChange={(e) => handleEditFormChange('cost', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Preço de Venda"
+                                        type="number"
+                                        value={editFormData.price || ''}
+                                        onChange={(e) => handleEditFormChange('price', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                                        }}
+                                    />
+                                </Stack>
+                            </Box>
+
+                            {/* Medidas */}
+                            <Box>
+                                <Typography variant="h6" gutterBottom color="primary">
+                                    Medidas (cm)
+                                </Typography>
+                                <Stack direction="row" spacing={2}>
+                                    <TextField
+                                        label="Busto/Peito"
+                                        type="number"
+                                        value={editFormData.bust || ''}
+                                        onChange={(e) => handleEditFormChange('bust', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            endAdornment: <InputAdornment position="end">cm</InputAdornment>,
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Cintura"
+                                        type="number"
+                                        value={editFormData.waist || ''}
+                                        onChange={(e) => handleEditFormChange('waist', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            endAdornment: <InputAdornment position="end">cm</InputAdornment>,
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Comprimento"
+                                        type="number"
+                                        value={editFormData.length || ''}
+                                        onChange={(e) => handleEditFormChange('length', parseFloat(e.target.value) || 0)}
+                                        variant="outlined"
+                                        InputProps={{
+                                            endAdornment: <InputAdornment position="end">cm</InputAdornment>,
+                                        }}
+                                    />
+                                </Stack>
+                            </Box>
+
+                            {/* Outras Informações */}
+                            <Box>
+                                <Typography variant="h6" gutterBottom color="primary">
+                                    Outras Informações
+                                </Typography>
+                                <Stack spacing={2}>
+                                    <TextField
+                                        label="Localização"
+                                        value={editFormData.location || ''}
+                                        onChange={(e) => handleEditFormChange('location', e.target.value)}
+                                        fullWidth
+                                        variant="outlined"
+                                        helperText="Onde o item está armazenado"
+                                    />
+                                    <TextField
+                                        label="Descrição"
+                                        value={editFormData.description || ''}
+                                        onChange={(e) => handleEditFormChange('description', e.target.value)}
+                                        fullWidth
+                                        multiline
+                                        rows={3}
+                                        variant="outlined"
+                                    />
+                                    <TextField
+                                        label="Defeitos/Observações"
+                                        value={editFormData.flaws || ''}
+                                        onChange={(e) => handleEditFormChange('flaws', e.target.value)}
+                                        fullWidth
+                                        multiline
+                                        rows={2}
+                                        variant="outlined"
+                                        helperText="Descreva qualquer defeito ou observação importante"
+                                    />
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={editFormData.active !== false}
+                                                onChange={(e) => handleEditFormChange('active', e.target.checked)}
+                                                color="primary"
+                                            />
+                                        }
+                                        label="Item Ativo"
+                                    />
+                                </Stack>
+                            </Box>
+                        </Stack>
+                    )}
+                </DialogContent>
+
+                <DialogActions sx={{ p: 3 }}>
+                    <Button
+                        onClick={handleCloseEditModal}
+                        variant="outlined"
+                        disabled={editLoading}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={handleSaveEdit}
+                        variant="contained"
+                        startIcon={editLoading ? <CircularProgress size={20} /> : <Edit />}
+                        disabled={editLoading}
+                    >
+                        {editLoading ? 'Salvando...' : 'Salvar Alterações'}
                     </Button>
                 </DialogActions>
             </Dialog>

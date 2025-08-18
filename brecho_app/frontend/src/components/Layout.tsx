@@ -13,6 +13,10 @@ import {
     IconButton,
     useTheme,
     useMediaQuery,
+    Avatar,
+    Menu,
+    MenuItem,
+    Divider,
 } from '@mui/material';
 import {
     Menu as MenuIcon,
@@ -22,8 +26,12 @@ import {
     PhotoCamera as PhotoCameraIcon,
     ShoppingCart as ShoppingCartIcon,
     Store as StoreIcon,
+    Logout as LogoutIcon,
+    AccountCircle as AccountCircleIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { logout } from '../config/firebase';
 
 const drawerWidth = 240;
 
@@ -33,10 +41,12 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const navigate = useNavigate();
     const location = useLocation();
+    const { user } = useAuth();
 
     const menuItems = [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
@@ -54,6 +64,23 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         navigate(path);
         if (isMobile) {
             setMobileOpen(false);
+        }
+    };
+
+    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            handleMenuClose();
+        } catch (error) {
+            console.error('Logout error:', error);
         }
     };
 
@@ -102,11 +129,85 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     >
                         <MenuIcon />
                     </IconButton>
-                    <Typography variant="h6" noWrap component="div">
+                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
                         Sistema de Gestão do Brechó
                     </Typography>
+
+                    {/* User Menu */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                            {user?.displayName || user?.email}
+                        </Typography>
+                        <IconButton
+                            size="large"
+                            aria-label="account of current user"
+                            aria-controls="user-menu"
+                            aria-haspopup="true"
+                            onClick={handleMenuOpen}
+                            color="inherit"
+                        >
+                            <Avatar
+                                src={user?.photoURL || undefined}
+                                sx={{ width: 32, height: 32 }}
+                            >
+                                {!user?.photoURL && <AccountCircleIcon />}
+                            </Avatar>
+                        </IconButton>
+                    </Box>
                 </Toolbar>
             </AppBar>
+
+            {/* User Menu */}
+            <Menu
+                id="user-menu"
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+                onClick={handleMenuClose}
+                PaperProps={{
+                    elevation: 0,
+                    sx: {
+                        overflow: 'visible',
+                        filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+                        mt: 1.5,
+                        '& .MuiAvatar-root': {
+                            width: 32,
+                            height: 32,
+                            ml: -0.5,
+                            mr: 1,
+                        },
+                        '&:before': {
+                            content: '""',
+                            display: 'block',
+                            position: 'absolute',
+                            top: 0,
+                            right: 14,
+                            width: 10,
+                            height: 10,
+                            bgcolor: 'background.paper',
+                            transform: 'translateY(-50%) rotate(45deg)',
+                            zIndex: 0,
+                        },
+                    },
+                }}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            >
+                <MenuItem onClick={handleMenuClose}>
+                    <Avatar src={user?.photoURL || undefined} />
+                    <Box>
+                        <Typography variant="subtitle1">{user?.displayName || 'Usuário'}</Typography>
+                        <Typography variant="body2" color="text.secondary">{user?.email}</Typography>
+                    </Box>
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={handleLogout}>
+                    <ListItemIcon>
+                        <LogoutIcon fontSize="small" />
+                    </ListItemIcon>
+                    Sair
+                </MenuItem>
+            </Menu>
 
             <Box
                 component="nav"

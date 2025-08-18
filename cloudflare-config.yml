@@ -1,0 +1,14 @@
+tunnel: 5c097772-e7aa-476b-b1a1-347b364db291
+credentials-file: /Users/capanema/.cloudflared/5c097772-e7aa-476b-b1a1-347b364db291.json
+
+ingress:
+  - hostname: ai.celflow.com
+    service: http://localhost:8808
+  - hostname: api.celflow.com
+    service: http://localhost:8000
+  - hostname: dashboard.celflow.com
+    path: /brecho/*
+    service: http://localhost:3000
+  - hostname: dashboard.celflow.com
+    service: http://localhost:3000
+  - service: http_status:404

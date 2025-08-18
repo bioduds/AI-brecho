@@ -1,5 +1,5 @@
 const API_BASE_URL = 'http://192.168.18.21:8000';
-const AI_GATEWAY_URL = 'http://192.168.18.21:8808'; // Direto no AI Gateway igual browser! // Update with your actual API URL
+const AI_GATEWAY_URL = 'https://ai.celflow.com'; // AI Gateway via Cloudflare tunnel! // Update with your actual API URL
 
 export interface APIResponse<T> {
     success: boolean;
